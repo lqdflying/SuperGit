@@ -5,19 +5,19 @@ alwaysApply: true
 
 # SuperGit Project
 
-VS Code extension for a Git commit graph and branch tracking webview.
+VS Code extension for a Git commit graph, branch tracking, and branch history webview.
 
 ## Source of truth
 
 - Product behavior/UI: read all files in `Design/` before UI or behavior changes.
-- Spec: `Design/git-graph-extension-spec-v4.md`
-- Visual reference: `Design/git-graph-v4-final.jsx`
+- Graph spec: `Design/git-graph-extension-spec-v4.md` · mock: `Design/git-graph-v4-final.jsx`
+- Branch History spec: `Design/branch-history-coding-guide.md` · mock: `Design/branch-history-v2.jsx`
 - Assets: `assets/icon.png` (package/panel icon), `assets/logo.png` (webview logo)
 
 ## Design goals
 
 - Dark VS Code-native webview; dense, operational, tool-like UI (not a landing page)
-- Commit graph tab, branch tracking tab, multi-remote visibility, guarded Git actions
+- Commit graph tab, branch tracking tab, **branch history tab**, multi-remote visibility, guarded Git actions
 - Stable dimensions for graph lanes, sidebars, toolbar, rows, status areas
 - Do not replace real UI with explanatory placeholder text
 - Branch tracking actions must be **contextual**: after selection, show ahead/behind/synced/diverged/no-upstream/**remote-only** and enable/highlight only sensible push/pull/upstream actions
@@ -31,6 +31,7 @@ VS Code extension for a Git commit graph and branch tracking webview.
 | Git CLI | `src/git/runner.ts` |
 | Parsing | `src/git/parser.ts` |
 | Read models | `src/git/commands.ts` |
+| Branch history | `src/git/branch-lifecycle.ts`, `src/git/branch-status.ts` |
 | Write actions | `src/git/actions.ts` |
 | Diff provider | `src/git/diffProvider.ts` |
 | Webview React | `src/webview/main.tsx`, `App.tsx`, `components/` |
@@ -43,14 +44,14 @@ VS Code extension for a Git commit graph and branch tracking webview.
 - `superGit.debug: true` enables debug logs in output channel + log file
 - Depends on `vscode.git`; `main` is `./dist/extension.js`
 
-## Git action pitfalls (branch tracking)
+## Git action pitfalls (branch tracking & history)
 
 - `git pull --ff-only origin <branch>` updates the **checked-out** branch, not `<branch>` when another branch is selected
 - Non-checked-out pull: `git fetch <remote> <branch>:<branch>` (fast-forward only; no `+`)
 - Checked-out pull: `git pull --ff-only <remote> <branch>`
-- After successful branch actions in `runBranchAction`, refresh in order: `loadBranches` → `loadRemotes` → `loadCommits` when history changed
-- Webview must pass explicit `branchName` and `remote` on `execute-branch-action` for Tracking tab selection
-- **Remote-only refs** (on remote, no local branch): `getRemoteBranches()` sets `localBranchName` only when a matching `refs/heads/<name>` exists. Both `BranchSidebar` and `TrackingView` must consume `remoteBranches` and show refs where `localBranchName` is unset — not only local rows from `getBranches()`.
+- After successful branch actions in `runBranchAction`, refresh in order: `loadBranches` → `loadRemotes` → **`loadBranchHistory`** → `loadCommits` when history changed
+- Webview must pass explicit `branchName` and `remote` on `execute-branch-action` for Tracking **and Branch History** selection
+- **Remote-only refs** (on remote, no local branch): `getRemoteBranches()` sets `localBranchName` only when a matching `refs/heads/<name>` exists. `BranchSidebar`, `TrackingView`, and **Branch History** must consume `remoteBranches` and show refs where `localBranchName` is unset — not only local rows from `getBranches()`.
 
 ## Agent policy
 

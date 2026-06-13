@@ -26,7 +26,7 @@ npm run package
 
 `npm run test:integration` may fail in headless containers (Electron/sandbox). Report that clearly; it is not necessarily a product bug.
 
-Current expected unit status: **68 tests** passing; coverage target met for `src/git/*.ts`.
+Current expected unit status: **100 tests** passing; coverage target met for `src/git/*.ts` (`diffProvider.ts` excluded from coverage).
 
 ## Version source of truth
 

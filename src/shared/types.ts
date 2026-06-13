@@ -105,6 +105,77 @@ export type BranchAction =
   | "delete"
   | "prune-stale";
 
+export type BranchLifecycleStatus = "active" | "diverged" | "merged" | "remote-only";
+
+export type BranchDivergenceSeverity = "mild" | "high" | "severe";
+
+export interface BranchLifecycle {
+  name: string;
+  colorIndex: number;
+  isCurrent: boolean;
+  remoteOnly?: boolean;
+  remote?: string;
+  status: BranchLifecycleStatus;
+  severity?: BranchDivergenceSeverity;
+  stale: boolean;
+  startDay: number;
+  endDay: number;
+  commitDays: number[];
+  totalCommits: number;
+  startDate: string;
+  endDate: string;
+  commitDates: string[];
+  hashStart: string;
+  hashEnd: string;
+  hashLca?: string;
+  forkedFrom: { branch: string; day: number; date: string } | null;
+  mergedInto: { branch: string; day: number; date: string } | null;
+  aheadOfMain: number;
+  behindMain: number;
+  lastCommonAncestorDay: number;
+  lastCommonAncestorDate?: string;
+  remotes: RemotePosition[];
+  divergePerRemote?: PerRemoteDivergence[];
+  description: string;
+}
+
+export interface RemotePosition {
+  name: string;
+  colorIndex: number;
+  pushDay: number;
+  pushDate: string;
+  hash: string;
+  behindLocal: number;
+}
+
+export interface PerRemoteDivergence {
+  remote: string;
+  behind: number;
+  mainRef: string;
+}
+
+export interface RemoteMainPosition {
+  name: string;
+  colorIndex: number;
+  lastDay: number;
+  lastDate: string;
+  hash: string;
+  commits: number[];
+}
+
+export interface BranchHistoryPayload {
+  lifecycles: BranchLifecycle[];
+  defaultBranch: string;
+  remoteMains: RemoteMainPosition[];
+  window: BranchHistoryWindow;
+}
+
+export interface BranchHistoryWindow {
+  totalDays: number;
+  startDate: string;
+  endDate: string;
+}
+
 export type WebviewMessage =
   | { type: "ready" }
   | { type: "webview-log"; level: "debug" | "info" | "warn" | "error"; message: string; details?: unknown }
@@ -112,6 +183,7 @@ export type WebviewMessage =
   | { type: "request-commits"; dateRange: DateRange; page: number; searchText: string; scope: HistoryScope }
   | { type: "request-branches" }
   | { type: "request-remotes" }
+  | { type: "request-branch-history"; dateRange: DateRange }
   | { type: "request-commit-details"; commitHash: string }
   | { type: "open-commit-file-diff"; commitHash: string; file: CommitFileChange }
   | { type: "refresh" }
@@ -123,8 +195,9 @@ export type ExtHostMessage =
   | { type: "commits-data"; commits: CommitNode[]; pagination: PaginationState }
   | { type: "branches-data"; branches: BranchInfo[]; remoteBranches: RemoteBranchInfo[] }
   | { type: "remotes-data"; remotes: RemoteConfig[] }
+  | { type: "branch-history-data"; lifecycles: BranchLifecycle[]; defaultBranch: string; remoteMains: RemoteMainPosition[]; window: BranchHistoryWindow }
   | { type: "commit-details-data"; commitHash: string; baseHash?: string; files: CommitFileChange[] }
-  | { type: "loading"; loading: boolean; scope?: "all" | "commits" | "branches" | "remotes" | "commit-details" | "action" }
+  | { type: "loading"; loading: boolean; scope?: "all" | "commits" | "branches" | "remotes" | "branch-history" | "commit-details" | "action" }
   | { type: "error"; message: string }
   | { type: "action-result"; success: boolean; message: string }
   | { type: "repo-changed" }

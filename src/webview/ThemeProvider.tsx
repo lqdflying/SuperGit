@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ThemeColors } from "../shared/themeColors";
-import { readThemeColors } from "./theme";
+import { readThemeColors, applyNativeColorScheme } from "./theme";
 
 const ThemeContext = createContext<ThemeColors | null>(null);
 
@@ -14,6 +14,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<ThemeColors>(() => readThemeColors());
 
   const refreshTheme = useCallback(() => {
+    applyNativeColorScheme();
     setTheme(readThemeColors());
   }, []);
 

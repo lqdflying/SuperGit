@@ -1,0 +1,63 @@
+---
+description: Branch History tab — data layer, messaging, SVG timeline, and design refs
+globs: src/webview/components/history/**,src/git/branch-lifecycle.ts,src/git/branch-status.ts,Design/branch-history*
+alwaysApply: false
+---
+
+# Branch History Tab
+
+## Design refs
+
+- Spec: `Design/branch-history-coding-guide.md`
+- Visual mock: `Design/branch-history-v2.jsx`
+
+## Data flow
+
+```
+App (tab=history) → request-branch-history { dateRange }
+  → extension.loadBranchHistory → getBranchLifecycles()
+  → branch-history-data { lifecycles, defaultBranch, remoteMains, window }
+  → BranchHistoryTab → execute-branch-action (on success: reload branches/remotes/history/commits)
+```
+
+Messages/types in `src/shared/types.ts`: `BranchLifecycle`, `BranchHistoryPayload`, `request-branch-history`, `branch-history-data`, loading scope `branch-history`.
+
+## Git layer (`branch-lifecycle.ts`)
+
+| Helper | Notes |
+|--------|-------|
+| `resolveDefaultBranch` | `origin/HEAD` → `main` → `master` → first local |
+| `resolveHistoryDateWindow` | `presetDays: null` (All) **capped at 90d** — separate from graph date logic |
+| `getBranchLifecycles` | local lifecycles + remote-only (`!localBranchName`) |
+| `computePerRemoteDivergence` | per-remote `{remote}/{defaultBranch}...branch` behind counts |
+| `sortBranchLifecycles` | default → diverged → active → remote-only → merged |
+
+Status algorithm: `branch-status.ts` → `detectStatus`, `generateDescription`, `STALE_THRESHOLD_DAYS = 7`.
+
+## Webview components
+
+| File | Role |
+|------|------|
+| `BranchHistoryTab.tsx` | Summary, legend, selection, detail panel |
+| `TimelineSvg.tsx` | Grid, lane layout |
+| `BranchLane.tsx` | Label, bar, dots, stale pill |
+| `GhostTrack.tsx` | Diverged-only faded main track + LCA connector |
+| `RemoteMarker.tsx` | Triangle flag; bracket when `behindLocal > 0` |
+| `HistoryDetail.tsx` | Metrics, remote cards, contextual quick actions |
+
+## Tests
+
+- `src/test/unit/branch-status.test.ts` — TC-BH01..BH08 + `generateDescription`
+- `src/test/unit/branch-lifecycle.test.ts` — TC-BH09..BH13, `getBranchLifecycles` mock integration
+- Mock pitfall: `mockResolvedValueOnce` queue leaks across tests — use exact call counts or `mockReset()` in `beforeEach`
+
+## Contextual actions (detail panel)
+
+| Status | Primary action |
+|--------|----------------|
+| synced | none |
+| ahead | Push N |
+| behind | Pull N |
+| diverged | Push + Pull |
+| no-upstream | Set Upstream |
+| remote-only | Create Local Branch (pull path) |

@@ -26,7 +26,14 @@ export const colors = {
   tagBorder: "rgba(210,168,255,0.25)",
   tagFg: "#d2a8ff",
   currentBadge: "#f85149",
-  currentBadgeBg: "rgba(248,81,73,0.13)"
+  currentBadgeBg: "rgba(248,81,73,0.13)",
+  historyGrid: "#21262d",
+  historyGridWeek: "#30363d",
+  historyMerged: "#8b949e",
+  historyStale: "#484f58",
+  historyWarn: "#d29922",
+  historyDanger: "#f85149",
+  historyOk: "#3fb950"
 } as const;
 
 export const typography = {

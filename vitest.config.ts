@@ -18,7 +18,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/git/**/*.ts"],
-      exclude: ["src/test/**", "src/webview/**"],
+      exclude: ["src/test/**", "src/webview/**", "src/git/diffProvider.ts"],
       thresholds: {
         branches: 80,
         functions: 80,

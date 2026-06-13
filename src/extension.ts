@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { getBranchLifecycles } from "./git/branch-lifecycle";
 import { executeBranchAction, executeCommitAction } from "./git/actions";
 import { getActiveRepository, onRepositoryChange } from "./git/api";
 import { getBranches, getCommitBaseHash, getCommitFileChanges, getCommits, getRemoteBranches, getRemotes, getRepositoryState } from "./git/commands";
@@ -27,6 +28,10 @@ const lastCommitRequest: { dateRange: DateRange; page: number; searchText: strin
   page: 0,
   searchText: "",
   scope: DEFAULT_HISTORY_SCOPE
+};
+
+const lastBranchHistoryRequest: { dateRange: DateRange } = {
+  dateRange: DEFAULT_DATE_RANGE
 };
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -186,6 +191,10 @@ async function handleWebviewMessage(message: WebviewMessage): Promise<void> {
     case "request-remotes":
       await loadRemotes();
       return;
+    case "request-branch-history":
+      lastBranchHistoryRequest.dateRange = message.dateRange;
+      await loadBranchHistory(message.dateRange);
+      return;
     case "request-commit-details":
       await loadCommitDetails(message.commitHash);
       return;
@@ -319,6 +328,36 @@ async function loadRemotes(knownRoot?: string): Promise<void> {
   }
 }
 
+async function loadBranchHistory(dateRange: DateRange, knownRoot?: string): Promise<void> {
+  debug("loadBranchHistory start", { dateRange, knownRoot });
+  post({ type: "loading", loading: true, scope: "branch-history" });
+  try {
+    const root = knownRoot ?? (await resolveRepositoryRoot());
+    if (!root) {
+      post({ type: "branch-history-data", lifecycles: [], defaultBranch: "main", remoteMains: [], window: { totalDays: 7, startDate: "", endDate: "" } });
+      return;
+    }
+
+    const payload = await getBranchLifecycles(root, dateRange);
+    post({
+      type: "branch-history-data",
+      lifecycles: payload.lifecycles,
+      defaultBranch: payload.defaultBranch,
+      remoteMains: payload.remoteMains,
+      window: payload.window
+    });
+    info("branch history loaded", {
+      count: payload.lifecycles.length,
+      defaultBranch: payload.defaultBranch,
+      remoteMainCount: payload.remoteMains.length
+    });
+  } catch (error) {
+    postError(error);
+  } finally {
+    post({ type: "loading", loading: false, scope: "branch-history" });
+  }
+}
+
 async function runCommitAction(action: CommitAction, commitHash: string): Promise<void> {
   info("commit action requested", { action, commitHash: commitHash.slice(0, 12) });
   const root = await resolveRepositoryRoot();
@@ -361,6 +400,7 @@ async function runBranchAction(action: BranchAction, branchName?: string, remote
       post({ type: "repo-state", repo });
       await loadBranches(root);
       await loadRemotes(root);
+      await loadBranchHistory(lastBranchHistoryRequest.dateRange, root);
       if (action === "pull" || action === "push" || action === "delete" || action === "set-upstream") {
         await loadCommits(lastCommitRequest.dateRange, lastCommitRequest.page, lastCommitRequest.searchText, lastCommitRequest.scope, root);
       }
@@ -536,6 +576,9 @@ function summarizeWebviewMessage(message: WebviewMessage) {
       scope: message.scope
     };
   }
+  if (message.type === "request-branch-history") {
+    return { type: message.type, dateRange: message.dateRange };
+  }
   if (message.type === "request-commit-details") {
     return { type: message.type, commitHash: message.commitHash.slice(0, 12) };
   }
@@ -569,6 +612,13 @@ function summarizeExtHostMessage(message: ExtHostMessage) {
       return { type: message.type, commitHash: message.commitHash.slice(0, 12), fileCount: message.files.length };
     case "remotes-data":
       return { type: message.type, count: message.remotes.length };
+    case "branch-history-data":
+      return {
+        type: message.type,
+        count: message.lifecycles.length,
+        defaultBranch: message.defaultBranch,
+        remoteMainCount: message.remoteMains.length
+      };
     case "repo-state":
       return { type: message.type, repo: message.repo };
     default:

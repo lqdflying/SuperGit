@@ -4,6 +4,7 @@ import { useThemeColors } from "./ThemeProvider";
 export type IconName =
   | "branch"
   | "commit"
+  | "history"
   | "tag"
   | "merge"
   | "remote"
@@ -61,6 +62,16 @@ export function Icon({ type, size = 14, color, style }: IconProps): ReactElement
         <circle cx="8" cy="8" r="3" />
         <line x1="8" y1="1" x2="8" y2="5" />
         <line x1="8" y1="11" x2="8" y2="15" />
+      </>
+    ),
+    history: (
+      <>
+        <line x1="2" y1="4" x2="14" y2="4" />
+        <line x1="2" y1="8" x2="14" y2="8" />
+        <line x1="2" y1="12" x2="14" y2="12" />
+        <circle cx="5" cy="4" r="1.2" fill={strokeColor} />
+        <circle cx="10" cy="8" r="1.2" fill={strokeColor} />
+        <circle cx="7" cy="12" r="1.2" fill={strokeColor} />
       </>
     ),
     tag: (

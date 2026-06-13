@@ -6,7 +6,8 @@ These notes capture the practical lessons from building and debugging the SuperG
 
 - Build a VS Code extension named `SuperGit`.
 - The source of truth for product behavior and UI is the `Design/` folder.
-- Use `Design/git-graph-extension-spec.md` for implementation details and `Design/git-graph-extension-ui-v2.jsx` as the visual reference.
+- Use `Design/git-graph-extension-spec.md` (or v4) for graph/tracking; `Design/branch-history-coding-guide.md` for Branch History.
+- Visual refs: `Design/git-graph-extension-ui-v2.jsx` / `git-graph-v4-final.jsx`; `Design/branch-history-v2.jsx` for history tab.
 - Use assets from `assets/`:
   - `assets/icon.png` for the extension/package/panel icon.
   - `assets/logo.png` for the webview title/logo.
@@ -18,6 +19,7 @@ These notes capture the practical lessons from building and debugging the SuperG
   - dark VS Code-native webview
   - commit graph tab
   - branch tracking tab
+  - branch history tab
   - multi-remote visibility
   - guarded Git actions
   - compact, tool-like UI, not a landing page
@@ -100,11 +102,63 @@ After successful branch actions in `runBranchAction` (`src/extension.ts`), refre
 
 1. `loadBranches(root)`
 2. `loadRemotes(root)`
-3. `loadCommits(...)` when push/pull/set-upstream/delete changed history
+3. `loadBranchHistory(lastBranchHistoryRequest.dateRange, root)` — keeps Branch History fresh after push/pull/etc.
+4. `loadCommits(...)` when push/pull/set-upstream/delete changed history
 
-Do not assume a full `loadInitialData()` parallel reload is enough for the tracking tab to feel fresh immediately after pull/push.
+Do not assume a full `loadInitialData()` parallel reload is enough for the tracking or history tabs to feel fresh immediately after pull/push.
 
 Pass explicit `branchName` and `remote` from the webview through `execute-branch-action` so actions target the selected row, not only the checked-out branch.
+
+## Branch History UX Lessons
+
+Fine-tuning notes for `src/webview/components/history/` and `src/git/branch-lifecycle.ts`. Full spec: `Design/branch-history-coding-guide.md`.
+
+### Tab & data loading
+
+- Third tab: `useState<"graph" | "branches" | "history">` in `App.tsx`; icon `history` in `icons.tsx`.
+- **Lazy load** branch history — post `request-branch-history` when `tab === "history"` only (debounced ~150ms); do not block graph startup with `loadInitialData`.
+- Shared `dateRange` from `App.tsx` applies to graph and history; switching tabs does not reset it.
+- **First visit promotion:** on first switch to history, if `dateRange` is still default `7d`, call `setPreset(30)` once (persist flag in `getState()`).
+- History **All** uses `resolveHistoryDateWindow` with a **90-day cap** — not the graph's unbounded All.
+
+### Selection & lanes
+
+- Default selection: checked-out branch if visible → else first diverged lane → else default branch.
+- `.current` = checked out; `.selected` = detail/quick-actions target.
+- Sort in webview via `sortBranchLifecycles`: default branch → diverged (by severity) → active → remote-only → merged.
+- Remote-only refs from `getRemoteBranches()` where `!localBranchName`: dashed lane, no ghost track, status `remote-only`.
+
+### Ghost track & remotes
+
+- Ghost track renders only for **diverged** local branches (faded main progression since LCA).
+- Remote markers: triangle when pushed; unpushed bracket when `behindLocal > 0`.
+- Per-remote divergence (`divergePerRemote`): commits behind each `{remote}/{defaultBranch}`.
+
+### Actions & refresh
+
+Same `execute-branch-action` contract as Tracking — always pass `branchName` and `remote`.
+Out of scope v1: rebase, PR, checkout, copy name, detail panel resize, cross-tab graph navigation.
+
+### Layout & theme
+
+- Timeline constants: `LABEL_W=220`, `DAY_W=30`, detail panel `320px` (`.branch-history-detail`).
+- History tokens: `--sg-history-*` in `media/styles.css`; read in `theme.ts` / `ThemeProvider`.
+- SVG: use theme colors from `useThemeColors()`; avoid invalid SVG attrs like `color-mix` — use `fillOpacity` / `strokeOpacity`.
+
+### Native date picker theming
+
+`DateRangeBar` uses `<input type="date">`. The calendar popup is native UI — style with:
+
+- `body.vscode-dark` / `vscode-light` → `color-scheme: dark|light` in CSS
+- `.date-input` with `--vscode-input-*` vars and `color-scheme: inherit`
+- `applyNativeColorScheme()` in `theme.ts`, synced from `ThemeProvider` on theme change
+
+### Tests
+
+- `branch-status.test.ts` — TC-BH01..BH08, `generateDescription`
+- `branch-lifecycle.test.ts` — TC-BH09..BH13, `getBranchLifecycles` with mocked `runGit`
+- Vitest coverage excludes `src/git/diffProvider.ts` (VS Code integration, untested in unit suite)
+- Watch for `mockResolvedValueOnce` leaking unconsumed mocks between tests (use `mockReset()` in `beforeEach`)
 
 ## Graph Tab UX Lessons
 
@@ -130,11 +184,12 @@ Fine-tuning notes for commit graph/detail work in the same session:
   - `src/git/runner.ts` runs Git CLI commands with timeouts and noninteractive env.
   - `src/git/parser.ts` parses Git stdout.
   - `src/git/commands.ts` exposes higher-level read models.
+  - `src/git/branch-lifecycle.ts` + `src/git/branch-status.ts` — Branch History lifecycles and status.
   - `src/git/actions.ts` handles guarded write actions.
 - Webview:
   - `src/webview/main.tsx` mounts React.
   - `src/webview/App.tsx` owns app state and message handling.
-  - `src/webview/components/` contains design-aligned UI sections.
+  - `src/webview/components/graph/` — commit graph; `tracking/` — branch tracking; `history/` — branch history.
   - `media/styles.css` contains the webview CSS.
 - Shared contracts:
   - `src/shared/types.ts`
@@ -537,8 +592,8 @@ npm run package
 
 Current expected unit status:
 
-- 68 tests passing.
-- Coverage above the design target for `src/git/*.ts`.
+- 100 tests passing.
+- Coverage above the design target for `src/git/*.ts` (`diffProvider.ts` excluded).
 
 `npm run test:integration` may fail in managed containers because Electron cannot start before extension load due to sandbox/display restrictions. Report this clearly instead of treating it as a product failure.
 
@@ -610,4 +665,4 @@ Expected included files (verify with `unzip -l supergit-*.vsix`):
    remotes loaded
    ```
 
-6. If any stage is missing, debug from that boundary.
+6. If any stage is missing, debug from that boundary. On Branch History tab, also expect `branch-history-data` after `request-branch-history`.

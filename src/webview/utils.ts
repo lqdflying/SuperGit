@@ -1,4 +1,4 @@
-import type { BranchInfo, RemoteBranchInfo } from "../shared/types";
+import type { BranchInfo, BranchLifecycle, BranchLifecycleStatus, RemoteBranchInfo } from "../shared/types";
 import type { ThemeColors } from "../shared/themeColors";
 
 export function branchColor(index: number, theme: ThemeColors): string {
@@ -106,4 +106,53 @@ export function formatRelativeFetched(value?: string): string {
     return `Last fetched: ${hours} hr ago`;
   }
   return `Last fetched: ${date.toLocaleDateString()}`;
+}
+
+export function sortBranchLifecycles(lifecycles: BranchLifecycle[], defaultBranch: string): BranchLifecycle[] {
+  const severityOrder = { severe: 0, high: 1, mild: 2 };
+  const statusOrder: Record<BranchLifecycleStatus, number> = { diverged: 0, active: 1, "remote-only": 2, merged: 3 };
+
+  return [...lifecycles].sort((a, b) => {
+    if (a.name === defaultBranch) {
+      return -1;
+    }
+    if (b.name === defaultBranch) {
+      return 1;
+    }
+
+    const statusDiff = statusOrder[a.status] - statusOrder[b.status];
+    if (statusDiff !== 0) {
+      return statusDiff;
+    }
+
+    if (a.status === "diverged" && b.status === "diverged") {
+      const sevA = a.severity ? severityOrder[a.severity] : 99;
+      const sevB = b.severity ? severityOrder[b.severity] : 99;
+      if (sevA !== sevB) {
+        return sevA - sevB;
+      }
+    }
+
+    if (a.status === "remote-only" && b.status === "remote-only") {
+      const remoteCmp = (a.remote ?? "").localeCompare(b.remote ?? "");
+      if (remoteCmp !== 0) {
+        return remoteCmp;
+      }
+      return a.name.localeCompare(b.name);
+    }
+
+    if (a.status === "merged" && b.status === "merged") {
+      return b.endDay - a.endDay;
+    }
+
+    return b.startDay - a.startDay;
+  });
+}
+
+export function formatHistoryDayLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return `${date.toLocaleString("en", { month: "short" })} ${date.getDate()}`;
 }

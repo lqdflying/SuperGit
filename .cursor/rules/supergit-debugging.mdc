@@ -40,7 +40,8 @@ rg -n "webview:|command invoked|creating SuperGit|error|warn|failed" ~/.vscode-s
 | `ready` but no commits | Repository root, `vscode.git` API, `src/git/runner.ts` logs, workspace is a git repo |
 | Pull completed but tracking counts unchanged | Selected branch may not have been updated (non-checked-out `git pull` merges into current branch); confirm `branches loaded` after action |
 | Branch tracking buttons look white/unthemed | Global transparent `button` reset in `media/styles.css`; set dark backgrounds on `.local-branch-pill`, `.remote-row`, `.quick-button`, `.branch-list-item`, `.file-change-item` |
+| Custom date picker calendar stays light in dark theme | Set `color-scheme` on `body.vscode-dark`/`vscode-light`; `.date-input` uses `--vscode-input-*` + `applyNativeColorScheme()` in `ThemeProvider` |
 
 ## UI failure checklist
 
-Enable debug → reload → open SuperGit → `SuperGit: Show Logs` → confirm full stage chain through `commits loaded`, `branches loaded`, `remotes loaded`. Debug from the first missing stage.
+Enable debug → reload → open SuperGit → `SuperGit: Show Logs` → confirm full stage chain through `commits loaded`, `branches loaded`, `remotes loaded`. On Branch History tab: `request-branch-history` → `branch-history-data`. Debug from the first missing stage.

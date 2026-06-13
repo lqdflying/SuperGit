@@ -31,6 +31,13 @@
   --sg-button-fg: var(--vscode-button-foreground, #ffffff);
   --sg-current-badge: var(--vscode-errorForeground, #f85149);
   --sg-current-badge-bg: var(--vscode-inputValidation-errorBackground, rgba(248, 81, 73, 0.13));
+  --sg-history-grid: var(--vscode-panel-border, #21262d);
+  --sg-history-grid-week: var(--vscode-widget-border, #30363d);
+  --sg-history-merged: var(--vscode-descriptionForeground, #8b949e);
+  --sg-history-stale: var(--vscode-disabledForeground, #484f58);
+  --sg-history-warn: #d29922;
+  --sg-history-danger: var(--sg-behind);
+  --sg-history-ok: var(--vscode-gitDecoration-addedResourceForeground, #3fb950);
 
   /* Branch lane palette (dark default) */
   --sg-branch-0: #f78166;
@@ -108,6 +115,15 @@ body.vscode-high-contrast {
   --sg-remote-1: #d2a8ff;
   --sg-remote-2: #7ee787;
   --sg-remote-3: #ffa657;
+}
+
+body.vscode-dark,
+body.vscode-high-contrast {
+  color-scheme: dark;
+}
+
+body.vscode-light {
+  color-scheme: light;
 }
 
 html,
@@ -278,8 +294,7 @@ button {
   flex-shrink: 0;
 }
 
-.search-bar input,
-.date-input {
+.search-bar input {
   background: transparent;
   border: none;
   border-radius: 0;
@@ -539,11 +554,31 @@ button {
 .date-input {
   padding: 2px 6px;
   font-size: 11px;
-  background: var(--bg3);
-  border: 1px solid var(--border);
+  min-height: 22px;
+  background: var(--vscode-input-background, var(--bg3));
+  border: 1px solid var(--vscode-input-border, var(--border));
   border-radius: 6px;
   font-family: var(--font-mono);
-  color: var(--fg);
+  color: var(--vscode-input-foreground, var(--fg));
+  color-scheme: inherit;
+  accent-color: var(--accent);
+}
+
+.date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.9;
+}
+
+.date-input::-webkit-datetime-edit-fields-wrapper {
+  background: transparent;
+}
+
+.date-input::-webkit-datetime-edit,
+.date-input::-webkit-datetime-edit-text,
+.date-input::-webkit-datetime-edit-month-field,
+.date-input::-webkit-datetime-edit-day-field,
+.date-input::-webkit-datetime-edit-year-field {
+  color: var(--vscode-input-foreground, var(--fg));
 }
 
 .column-header {
@@ -1701,6 +1736,24 @@ button {
   cursor: not-allowed;
 }
 
+.quick-button.danger {
+  color: var(--sg-history-danger);
+}
+
+.quick-button.danger:hover {
+  background: color-mix(in srgb, var(--sg-history-danger) 12%, transparent);
+}
+
+.branch-dot.large {
+  width: 14px;
+  height: 14px;
+}
+
+.branch-dot.small {
+  width: 6px;
+  height: 6px;
+}
+
 .empty-panel.compact {
   padding: 4px 0;
   font-size: 11px;
@@ -1708,6 +1761,229 @@ button {
 
 .status-separator {
   opacity: 0.6;
+}
+
+.branch-history-tab {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.branch-history-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.branch-history-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 16px;
+  font-size: 11px;
+  border-bottom: 1px solid var(--sg-border-subtle);
+  flex-shrink: 0;
+}
+
+.branch-history-summary-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.branch-history-summary-stat strong {
+  font-weight: 700;
+}
+
+.branch-history-summary-range {
+  margin-left: auto;
+  color: var(--sg-fg-muted);
+}
+
+.branch-history-legend {
+  display: flex;
+  gap: 16px;
+  padding: 8px 16px 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 11px;
+  color: var(--sg-fg-dim);
+}
+
+.branch-history-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.branch-history-timeline {
+  flex: 1;
+  overflow: auto;
+  min-width: 0;
+}
+
+.branch-history-detail {
+  width: 320px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--sg-border);
+  background: var(--sg-bg1);
+  overflow-y: auto;
+}
+
+.branch-history-detail-section {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--sg-border-subtle);
+}
+
+.branch-history-detail-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sg-fg-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.branch-history-detail-header {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--sg-border-subtle);
+}
+
+.branch-history-detail-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sg-fg-bright);
+  font-family: var(--mono-family, monospace);
+}
+
+.branch-history-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin-right: 6px;
+}
+
+.branch-history-description {
+  font-size: 12.5px;
+  color: var(--sg-fg-dim);
+  line-height: 1.6;
+  margin: 12px 0 0;
+}
+
+.branch-history-metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+
+.branch-history-metric-cell {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--sg-bg2);
+}
+
+.branch-history-metric-label {
+  font-size: 10px;
+  color: var(--sg-fg-muted);
+  margin-bottom: 2px;
+}
+
+.branch-history-metric-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sg-fg-bright);
+  font-family: var(--mono-family, monospace);
+}
+
+.branch-history-remote-card {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--sg-bg2);
+  border: 1px solid var(--sg-border-subtle);
+  margin-bottom: 8px;
+}
+
+.branch-history-hash-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.branch-history-hash-pill {
+  font-size: 12px;
+  font-family: var(--mono-family, monospace);
+  font-weight: 600;
+  color: var(--sg-fg-bright);
+  background: var(--sg-bg3);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.branch-history-divergence-bar {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--sg-bg3);
+}
+
+.branch-history-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.branch-history-lane-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  gap: 3px;
+}
+
+.branch-history-lane-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.branch-history-lane-name {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--mono-family, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-history-lane-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 16px;
+  flex-wrap: wrap;
+  font-size: 10px;
+}
+
+.branch-history-stale-tag {
+  font-size: 9px;
+  color: var(--sg-history-stale);
+  background: color-mix(in srgb, var(--sg-history-stale) 15%, transparent);
+  padding: 0 5px;
+  border-radius: 4px;
+  font-weight: 600;
 }
 
 @media (max-width: 760px) {
