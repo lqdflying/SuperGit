@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { colors, typography } from "../../../shared/tokens";
+import { useEffect, useMemo, useState } from "react";
+import { colors } from "../../../shared/tokens";
 import type { BranchAction, BranchInfo, RemoteBranchInfo, RemoteConfig, RemoteTracking } from "../../../shared/types";
 import { Icon, type IconName } from "../../icons";
+import { CurrentBadge } from "../badges";
 import { blockHeight, buildTrackingRows, trackingRowHeight, type TrackingRow } from "../../utils";
 
 type TrackingStatus = "synced" | "ahead" | "behind" | "diverged" | "no-upstream" | "remote-only";
@@ -78,7 +79,6 @@ export function TrackingView({
     [trackingRows]
   );
   const remoteColors = useMemo(() => new Map(remotes.map((remote) => [remote.name, remote.color])), [remotes]);
-  const totalHeight = trackingRows.reduce((sum, row) => sum + trackingRowHeight(row), 0);
   const detached = currentBranch.startsWith("DETACHED");
   const currentBranchLabel = detached ? currentBranch.replace(/^DETACHED\s*/, "") : currentBranch;
   const checkoutBranch = resolveCurrentBranchName(branches, currentBranch);
@@ -176,64 +176,47 @@ export function TrackingView({
         ))}
         {remotes.length === 0 && <span className="muted">No remotes configured.</span>}
       </div>
-      <div className="tracking-diagram-wrap">
-        <div className="tracking-diagram">
-          <div className="tracking-local">
-            <div className="tracking-column-title">LOCAL</div>
-            {localRows.map((row) => {
-              const branch = row.branch;
-              const selected = !selectedRemoteOnly && branch.name === selectedBranchName;
-              return (
-                <div className="tracking-branch-block" key={`local-${branch.name}`} style={{ height: blockHeight(branch) }}>
+      <div className="tracking-table-wrap">
+        <div className="tracking-table-head">
+          <div className="tracking-head-local">Local</div>
+          <div className="tracking-head-tracks">Tracks</div>
+          <div className="tracking-head-remotes">
+            <Icon type="remote" size={12} />
+            Remotes
+          </div>
+        </div>
+        <div className="tracking-table-body">
+          {localRows.map((row) => {
+            const branch = row.branch;
+            const selected = !selectedRemoteOnly && branch.name === selectedBranchName;
+            return (
+              <div className="tracking-table-row" key={`local-${branch.name}`} style={{ minHeight: blockHeight(branch) }}>
+                <div className="tracking-cell-local">
                   <button
-                    className={`local-branch-pill${branch.isCurrent ? " current" : ""}${selected ? " selected" : ""}`}
+                    className={`tracking-branch-pill${selected ? " selected" : ""}`}
                     onClick={() => selectLocalBranch(branch.name)}
-                    style={{ borderColor: `${branch.color}77`, background: branch.isCurrent ? `${branch.color}28` : `${branch.color}14` }}
                     type="button"
                   >
                     <span className="branch-dot" style={{ background: branch.color }} />
                     <strong title={branch.name}>{branch.name}</strong>
-                    {branch.isCurrent && <span className="tiny-pill active">current</span>}
                   </button>
+                  {branch.isCurrent && <CurrentBadge />}
                 </div>
-              );
-            })}
-            {hasRemoteOnlySection && <div className="tracking-section-label">Remote-only</div>}
-            {remoteOnlyRows.map((row) => {
-              const { remoteBranch } = row;
-              const selected =
-                selectedRemoteOnly &&
-                remoteBranch.branchName === selectedBranchName &&
-                remoteBranch.remote === selectedRemote;
-              return (
-                <div className="tracking-branch-block" key={`remote-only-${remoteBranch.ref}`} style={{ height: trackingRowHeight(row) }}>
-                  <button
-                    className={`local-branch-pill remote-only-local${selected ? " selected" : ""}`}
-                    onClick={() => selectRemoteOnlyBranch(remoteBranch)}
-                    type="button"
-                  >
-                    <span className="remote-only-mark">—</span>
-                    <em className="remote-only-copy">no local branch</em>
-                  </button>
+                <div className="tracking-cell-tracks">
+                  {branch.remotes.length === 0 ? (
+                    <div className="tracking-track-line">
+                      <svg width={48} height={2}>
+                        <line x1={0} y1={1} x2={48} y2={1} stroke={colors.untracked} strokeWidth={1.2} strokeDasharray="4,3" />
+                      </svg>
+                      <span className="tracking-no-upstream">no upstream</span>
+                    </div>
+                  ) : (
+                    branch.remotes.map((tracking) => (
+                      <TrackingTrackLine key={tracking.ref} tracking={tracking} remoteColor={remoteColors.get(tracking.remote) ?? colors.fgDim} />
+                    ))
+                  )}
                 </div>
-              );
-            })}
-          </div>
-          <div className="tracking-arrows">
-            <div className="tracking-column-title centered">TRACKS</div>
-            <svg width={170} height={totalHeight || 1} className="tracking-svg">
-              <TrackingArrows rows={trackingRows} remoteColors={remoteColors} />
-            </svg>
-          </div>
-          <div className="tracking-remotes">
-            <div className="tracking-column-title with-icon">
-              <Icon type="remote" size={12} />
-              REMOTES
-            </div>
-            {localRows.map((row) => {
-              const branch = row.branch;
-              return (
-                <div className="tracking-remote-block" key={`remote-block-${branch.name}`} style={{ height: blockHeight(branch) }}>
+                <div className="tracking-cell-remotes">
                   {branch.remotes.length === 0 ? (
                     <span className="untracked-mark">-</span>
                   ) : (
@@ -242,50 +225,73 @@ export function TrackingView({
                         !selectedRemoteOnly && selectedBranchName === branch.name && selectedRemote === tracking.remote;
                       return (
                         <button
-                          className={`remote-row${remoteSelected ? " selected" : ""}`}
+                          className={`tracking-remote-pill${remoteSelected ? " selected" : ""}`}
                           key={tracking.ref}
                           onClick={() => selectLocalBranch(branch.name, tracking.remote)}
                           type="button"
                         >
                           <span className="branch-dot" style={{ background: remoteColors.get(tracking.remote) ?? colors.fgDim }} />
-                          <span className="remote-row-label" title={`${tracking.remote}/${branch.name}`}>
-                            <strong>{tracking.remote}/</strong>
-                            <em>{branch.name}</em>
+                          <span className="remote-row-label" title={tracking.ref}>
+                            {tracking.ref}
                           </span>
-                          {tracking.isConfiguredUpstream && <span className="tiny-pill active">upstream</span>}
-                          <StatusPill ahead={tracking.ahead} behind={tracking.behind} />
+                          {tracking.isConfiguredUpstream && (
+                            <span className="upstream-badge" style={{ color: remoteColors.get(tracking.remote) ?? colors.accent }}>
+                              upstream
+                            </span>
+                          )}
+                          <RemoteStatusIcons ahead={tracking.ahead} behind={tracking.behind} />
                         </button>
                       );
                     })
                   )}
                 </div>
-              );
-            })}
-            {hasRemoteOnlySection && <div className="tracking-section-label remote-column">Remote-only</div>}
-            {remoteOnlyRows.map((row) => {
-              const { remoteBranch } = row;
-              const remoteSelected =
-                selectedRemoteOnly &&
-                remoteBranch.branchName === selectedBranchName &&
-                remoteBranch.remote === selectedRemote;
-              return (
-                <div className="tracking-remote-block" key={`remote-only-block-${remoteBranch.ref}`} style={{ height: trackingRowHeight(row) }}>
+              </div>
+            );
+          })}
+          {hasRemoteOnlySection && <div className="tracking-section-label table-section">Remote-only</div>}
+          {remoteOnlyRows.map((row) => {
+            const { remoteBranch } = row;
+            const selected =
+              selectedRemoteOnly &&
+              remoteBranch.branchName === selectedBranchName &&
+              remoteBranch.remote === selectedRemote;
+            const remoteColor = remoteColors.get(remoteBranch.remote) ?? remoteBranch.color;
+            return (
+              <div className="tracking-table-row remote-only-row" key={`remote-only-${remoteBranch.ref}`} style={{ minHeight: trackingRowHeight(row) }}>
+                <div className="tracking-cell-local">
                   <button
-                    className={`remote-row${remoteSelected ? " selected" : ""}`}
+                    className={`tracking-branch-pill remote-only-local${selected ? " selected" : ""}`}
                     onClick={() => selectRemoteOnlyBranch(remoteBranch)}
                     type="button"
                   >
-                    <span className="branch-dot" style={{ background: remoteColors.get(remoteBranch.remote) ?? remoteBranch.color }} />
-                    <span className="remote-row-label" title={remoteBranch.ref}>
-                      <strong>{remoteBranch.remote}/</strong>
-                      <em>{remoteBranch.branchName}</em>
-                    </span>
-                    <span className="tiny-pill">remote</span>
+                    <em className="remote-only-copy">no local branch</em>
                   </button>
                 </div>
-              );
-            })}
-          </div>
+                <div className="tracking-cell-tracks">
+                  <div className="tracking-track-line">
+                    <svg width={36} height={12}>
+                      <line x1={0} y1={6} x2={28} y2={6} stroke={remoteColor} strokeWidth={1.5} strokeDasharray="4,3" opacity={0.6} />
+                      <polygon points="31,6 26,3 26,9" fill={remoteColor} opacity={0.7} />
+                    </svg>
+                    <span className="tracking-no-upstream">remote</span>
+                  </div>
+                </div>
+                <div className="tracking-cell-remotes">
+                  <button
+                    className={`tracking-remote-pill${selected ? " selected" : ""}`}
+                    onClick={() => selectRemoteOnlyBranch(remoteBranch)}
+                    type="button"
+                  >
+                    <span className="branch-dot" style={{ background: remoteColor }} />
+                    <span className="remote-row-label" title={remoteBranch.ref}>
+                      {remoteBranch.ref}
+                    </span>
+                    <span className="upstream-badge" style={{ color: remoteColor }}>remote</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
         {trackingRows.length === 0 && <div className="empty-panel">No branch tracking data found.</div>}
       </div>
@@ -349,96 +355,36 @@ export function TrackingView({
   );
 }
 
-function TrackingArrows({ rows, remoteColors }: { rows: TrackingRow[]; remoteColors: Map<string, string> }) {
-  const elements: ReactNode[] = [];
-  let offset = 0;
-
-  rows.forEach((row) => {
-    const height = trackingRowHeight(row);
-
-    if (row.kind === "remote-only") {
-      const centerY = offset + height / 2;
-      const color = remoteColors.get(row.remoteBranch.remote) ?? row.remoteBranch.color;
-      elements.push(
-        <g key={`remote-only-${row.remoteBranch.ref}`}>
-          <line x1={0} y1={centerY} x2={40} y2={centerY} stroke={color} strokeWidth={1.5} strokeDasharray="4,3" opacity={0.6} />
-          <polygon points={`43,${centerY} 37,${centerY - 3.5} 37,${centerY + 3.5}`} fill={color} opacity={0.7} />
-          <text x={52} y={centerY + 3} fill={colors.untracked} fontSize={10.5} fontFamily={typography.monoFamily}>
-            remote
-          </text>
-        </g>
-      );
-      offset += height;
-      return;
-    }
-
-    const branch = row.branch;
-    const localY = offset + height / 2;
-
-    if (branch.remotes.length === 0) {
-      elements.push(
-        <g key={`${branch.name}-none`}>
-          <line x1={0} y1={localY} x2={60} y2={localY} stroke={colors.untracked} strokeWidth={1.2} strokeDasharray="4,3" />
-          <text x={68} y={localY + 3} fill={colors.untracked} fontSize={11} fontFamily={typography.fontFamily} fontStyle="italic">
-            no upstream
-          </text>
-        </g>
-      );
-    } else {
-      branch.remotes.forEach((tracking, remoteIndex) => {
-        const remoteY = offset + 8 + remoteIndex * 32 + 16;
-        const color = remoteColors.get(tracking.remote) ?? colors.accent;
-        const arrowY = remoteY;
-        elements.push(
-          <g key={`${branch.name}-${tracking.ref}`}>
-            <line x1={0} y1={arrowY} x2={40} y2={arrowY} stroke={color} strokeWidth={1.5} opacity={0.6} />
-            <polygon points={`43,${arrowY} 37,${arrowY - 3.5} 37,${arrowY + 3.5}`} fill={color} opacity={0.7} />
-            <TrackingStatusDot x={52} y={arrowY} ahead={tracking.ahead} behind={tracking.behind} />
-          </g>
-        );
-      });
-    }
-
-    elements.push(<circle key={`${branch.name}-dot`} cx={4} cy={localY} r={4} fill={branch.color} opacity={0.7} />);
-    offset += height;
-  });
-
-  return <>{elements}</>;
-}
-
-function TrackingStatusDot({ x, y, ahead, behind }: { x: number; y: number; ahead: number; behind: number }) {
-  if (ahead === 0 && behind === 0) {
-    return (
-      <g transform={`translate(${x}, ${y - 7})`}>
-        <polyline points="4,8 7,11 12,5" fill="none" stroke={colors.synced} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      </g>
-    );
-  }
-
+function TrackingTrackLine({ tracking, remoteColor }: { tracking: RemoteTracking; remoteColor: string }) {
   return (
-    <text x={x} y={y + 4} fontSize={10.5} fontWeight="600" fontFamily={typography.monoFamily}>
-      {ahead > 0 && (
-        <tspan fill={colors.ahead}>+{ahead}</tspan>
+    <div className="tracking-track-line">
+      {tracking.ahead > 0 && <span className="track-count ahead">+{tracking.ahead}</span>}
+      <svg width={36} height={12}>
+        <line x1={0} y1={6} x2={28} y2={6} stroke={remoteColor} strokeWidth={1.5} opacity={0.6} />
+        <polygon points="31,6 26,3 26,9" fill={remoteColor} opacity={0.7} />
+      </svg>
+      {tracking.ahead === 0 && tracking.behind === 0 && (
+        <svg width={14} height={14} viewBox="0 0 16 16">
+          <polyline points="4,8.5 7,11 12,5" fill="none" stroke={colors.synced} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       )}
-      {ahead > 0 && behind > 0 && <tspan fill={colors.fgDim}> </tspan>}
-      {behind > 0 && (
-        <tspan fill={colors.behind} dx={ahead > 0 ? 4 : 0}>
-          -{behind}
-        </tspan>
-      )}
-    </text>
+      {tracking.behind > 0 && <span className="track-count behind">-{tracking.behind}</span>}
+    </div>
   );
 }
 
-function StatusPill({ ahead, behind }: { ahead: number; behind: number }) {
+function RemoteStatusIcons({ ahead, behind }: { ahead: number; behind: number }) {
   if (ahead === 0 && behind === 0) {
-    return <Icon type="check" size={11} color={colors.synced} />;
+    return (
+      <svg width={14} height={14} viewBox="0 0 16 16" className="remote-sync-icon">
+        <polyline points="4,8.5 7,11 12,5" fill="none" stroke={colors.synced} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
   }
-
   return (
     <span className="status-pill">
-      {ahead > 0 && <span style={{ color: colors.ahead }}>+{ahead}</span>}
-      {behind > 0 && <span style={{ color: colors.behind }}>-{behind}</span>}
+      {ahead > 0 && <span className="ahead">+{ahead}</span>}
+      {behind > 0 && <span className="behind">-{behind}</span>}
     </span>
   );
 }

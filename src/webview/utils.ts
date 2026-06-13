@@ -6,11 +6,11 @@ export function branchColor(index: number): string {
 }
 
 export function blockHeight(branch: BranchInfo): number {
-  return Math.max(branch.remotes.length, 1) * 32 + 16;
+  return Math.max(branch.remotes.length, 1) * 36 + 12;
 }
 
 export function remoteOnlyBlockHeight(): number {
-  return 32 + 16;
+  return 36 + 12;
 }
 
 export type TrackingRow =

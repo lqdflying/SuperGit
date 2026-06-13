@@ -150,21 +150,41 @@ function parseRefs(raw: string): { refs: string[]; tags: string[] } {
   };
 }
 
+function findMainBranchName(commits: CommitNode[], defaultBranch: string): string {
+  for (const commit of commits) {
+    for (const ref of commit.refs) {
+      if (ref === "main" || ref === "master") {
+        return ref;
+      }
+    }
+  }
+  return defaultBranch === "master" || defaultBranch === "main" ? defaultBranch : "main";
+}
+
 function assignLanes(commits: CommitNode[], remoteNames: string[], defaultBranch = "main"): void {
+  const mainBranch = findMainBranchName(commits, defaultBranch);
   const branchLane = new Map<string, number>();
   const parentBranch = new Map<string, { display: string; laneKey: string }>();
-  let nextLane = 0;
+  branchLane.set(mainBranch, 0);
+  let nextLane = 1;
 
   for (const commit of commits) {
     const inherited = parentBranch.get(commit.hash);
     const branchRef = findLocalBranchRef(commit.refs, remoteNames);
-    const branch = branchRef || inherited?.display || defaultBranch;
+    const branch = branchRef || inherited?.display || mainBranch;
     const laneKey = branchRef || inherited?.laneKey || branch;
     commit.branch = branch;
 
     if (!branchLane.has(laneKey)) {
-      branchLane.set(laneKey, nextLane % graph.visibleLanes);
-      nextLane += 1;
+      let lane: number;
+      if (branch === mainBranch || laneKey === mainBranch) {
+        lane = 0;
+      } else {
+        const sideLanes = graph.maxLanes - 1;
+        lane = 1 + ((nextLane - 1) % sideLanes);
+        nextLane += 1;
+      }
+      branchLane.set(laneKey, lane);
     }
     commit.branchIndex = branchLane.get(laneKey) ?? 0;
 

@@ -16,17 +16,17 @@
   --fg-bright: #e6edf3;
   --accent: #2f81f7;
   --accent-hover: #1f6feb;
-  --selection: rgba(47, 129, 247, 0.12);
+  --selection: rgba(47, 129, 247, 0.10);
   --hover: rgba(136, 198, 255, 0.04);
-  --tag-bg: rgba(210, 168, 255, 0.12);
+  --tag-bg: rgba(210, 168, 255, 0.10);
   --tag-fg: #d2a8ff;
-  --tag-border: rgba(210, 168, 255, 0.3);
+  --tag-border: rgba(210, 168, 255, 0.25);
   --ahead: #56d364;
   --behind: #f85149;
   --synced: #58a6ff;
   --untracked: #484f58;
-  --graph-column-width: 156px;
-  --graph-row-height: 34px;
+  --graph-column-width: 122px;
+  --graph-row-height: 32px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: "SF Mono", "Fira Code", "JetBrains Mono", Consolas, monospace;
 }
@@ -106,6 +106,14 @@ button {
   height: 18px;
   object-fit: contain;
   border-radius: 4px;
+}
+
+.title-accent-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
 }
 
 .title-name {
@@ -312,6 +320,37 @@ button {
 .branch-list-item.nested {
   padding-left: 22px;
   font-size: 11px;
+}
+
+.branch-list-item.header-item .branch-name {
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.branch-list-item.remote-only-item .branch-name {
+  color: var(--fg-dim);
+}
+
+.branch-dot.sidebar-dot {
+  width: 8px;
+  height: 8px;
+  box-shadow: none;
+}
+
+.branch-sub-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+  flex-shrink: 0;
+}
+
+.branch-sub-dot.remote-only-dot {
+  width: 6px;
+  height: 6px;
 }
 
 .branch-list-item.nested .branch-name {
@@ -557,6 +596,7 @@ button {
 .ref-pill,
 .tag-pill,
 .head-pill,
+.current-badge,
 .tiny-pill {
   display: inline-flex;
   align-items: center;
@@ -593,6 +633,16 @@ button {
   border: 1px solid rgba(47, 129, 247, 0.2);
 }
 
+.current-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(248, 81, 73, 0.13);
+  color: #f85149;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 .tiny-pill {
   font-size: 9px;
   padding: 1px 4px;
@@ -608,7 +658,7 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .commit-row.merge-row .message-text {
@@ -947,6 +997,212 @@ button {
   font-family: var(--font-mono);
 }
 
+.tracking-table-wrap {
+  padding: 0 24px 20px;
+}
+
+.tracking-table-head {
+  display: flex;
+  align-items: center;
+  padding: 0 0 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.tracking-head-local {
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.tracking-head-tracks {
+  width: 100px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.tracking-head-remotes {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tracking-table-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.tracking-table-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  box-sizing: border-box;
+}
+
+.tracking-cell-local {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 8px;
+  box-sizing: border-box;
+}
+
+.tracking-cell-tracks {
+  width: 100px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.tracking-cell-remotes {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tracking-branch-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: var(--bg3);
+  border: 1px solid var(--border-subtle);
+  max-width: 200px;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+}
+
+.tracking-branch-pill strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-bright);
+  font-family: var(--font-mono);
+}
+
+.tracking-branch-pill.selected {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  background: var(--selection);
+}
+
+.tracking-branch-pill.remote-only-local {
+  border: 1px dashed var(--border);
+  background: var(--bg2);
+  max-width: 180px;
+}
+
+.tracking-branch-pill.remote-only-local .remote-only-copy {
+  font-size: 10px;
+  font-style: italic;
+  color: var(--fg-muted);
+}
+
+.tracking-remote-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--bg3);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.tracking-remote-pill.selected {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  background: var(--selection);
+}
+
+.tracking-remote-pill .branch-dot {
+  width: 7px;
+  height: 7px;
+}
+
+.tracking-remote-pill .remote-row-label {
+  font-size: 11px;
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upstream-badge {
+  font-size: 9px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.tracking-track-line {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+}
+
+.track-count {
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.track-count.ahead {
+  color: var(--ahead);
+}
+
+.track-count.behind {
+  color: var(--behind);
+}
+
+.tracking-no-upstream {
+  font-size: 10px;
+  color: var(--untracked);
+  font-style: italic;
+}
+
+.tracking-section-label.table-section {
+  padding: 12px 0 6px;
+  border-bottom: none;
+}
+
+.status-pill .ahead {
+  color: var(--ahead);
+}
+
+.status-pill .behind {
+  color: var(--behind);
+}
+
+.remote-sync-icon {
+  flex-shrink: 0;
+}
+
+/* legacy tracking diagram (unused) */
 .tracking-diagram-wrap {
   padding: 4px 20px 20px;
   overflow-x: auto;

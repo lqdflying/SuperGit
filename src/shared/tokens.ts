@@ -12,7 +12,7 @@ export const colors = {
   fgBright: "#e6edf3",
   accent: "#2f81f7",
   accentHover: "#1f6feb",
-  branch: ["#58a6ff", "#d2a8ff", "#7ee787", "#ffa657", "#ff7b72", "#79c0ff", "#f778ba", "#a5d6ff"],
+  branch: ["#f78166", "#58a6ff", "#7ee787", "#d2a8ff", "#ffa657", "#79c0ff", "#f778ba", "#a5d6ff"],
   ahead: "#56d364",
   behind: "#f85149",
   upToDate: "#58a6ff",
@@ -20,11 +20,13 @@ export const colors = {
   untracked: "#484f58",
   trackArrow: "#6e7681",
   remoteColorPool: ["#58a6ff", "#d2a8ff", "#7ee787", "#ffa657"],
-  selection: "rgba(47,129,247,0.12)",
+  selection: "rgba(47,129,247,0.10)",
   hover: "rgba(136,198,255,0.04)",
-  tagBg: "rgba(210,168,255,0.12)",
-  tagBorder: "rgba(210,168,255,0.3)",
-  tagFg: "#d2a8ff"
+  tagBg: "rgba(210,168,255,0.10)",
+  tagBorder: "rgba(210,168,255,0.25)",
+  tagFg: "#d2a8ff",
+  currentBadge: "#f85149",
+  currentBadgeBg: "rgba(248,81,73,0.13)"
 } as const;
 
 export const typography = {
@@ -39,9 +41,10 @@ export const typography = {
 } as const;
 
 export const graph = {
-  laneWidth: 24,
-  rowHeight: 34,
-  nodeRadius: 4.5,
+  laneWidth: 22,
+  rowHeight: 32,
+  nodeRadius: 4,
   mergeSize: 12,
-  visibleLanes: 8
+  maxLanes: 5,
+  visibleLanes: 5
 } as const;

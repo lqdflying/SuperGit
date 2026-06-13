@@ -21,3 +21,17 @@ export function TagBadge({ text }: { text: string }) {
 export function HeadBadge() {
   return <span className="head-pill">HEAD</span>;
 }
+
+export function CurrentBadge() {
+  return <span className="current-badge">current</span>;
+}
+
+export function refBadgeColor(ref: string, laneColor: string): string {
+  if (ref === "HEAD") {
+    return laneColor;
+  }
+  if (ref.includes("/")) {
+    return colors.fgDim;
+  }
+  return laneColor;
+}

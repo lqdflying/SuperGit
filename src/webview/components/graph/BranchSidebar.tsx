@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import { colors } from "../../../shared/tokens";
 import type { BranchInfo, HistoryScope, RemoteBranchInfo } from "../../../shared/types";
+import { CurrentBadge } from "../badges";
 
 function isScopeEqual(a: HistoryScope, b: HistoryScope): boolean {
   if (a.type !== b.type) {
@@ -62,6 +64,7 @@ export function BranchSidebar({
         <ScopeRow
           active={scope.type === "all"}
           label="All branches"
+          header
           onClick={() => onScopeChange({ type: "all" })}
         />
 
@@ -72,7 +75,7 @@ export function BranchSidebar({
               label={branch.name}
               color={branch.color}
               onClick={() => onScopeChange({ type: "local", ref: branch.name, branchName: branch.name })}
-              trailing={branch.isCurrent ? <span className="tiny-pill active">current</span> : undefined}
+              trailing={branch.isCurrent ? <CurrentBadge /> : undefined}
             />
             {branch.remotes.map((tracking) => (
               <ScopeRow
@@ -80,7 +83,6 @@ export function BranchSidebar({
                 active={scope.type === "remote" && scope.ref === tracking.ref}
                 label={tracking.ref}
                 nested
-                color={branch.color}
                 onClick={() =>
                   onScopeChange({
                     type: "remote",
@@ -106,6 +108,7 @@ export function BranchSidebar({
                     active={isScopeEqual(scope, { type: "remote", ref: remoteBranch.ref, remote: remoteBranch.remote, branchName: remoteBranch.branchName })}
                     label={remoteBranch.branchName}
                     nested
+                    remoteOnly
                     color={remoteBranch.color}
                     onClick={() =>
                       onScopeChange({
@@ -133,6 +136,8 @@ function ScopeRow({
   label,
   color,
   nested,
+  remoteOnly,
+  header,
   trailing,
   onClick
 }: {
@@ -140,16 +145,21 @@ function ScopeRow({
   label: string;
   color?: string;
   nested?: boolean;
+  remoteOnly?: boolean;
+  header?: boolean;
   trailing?: ReactNode;
   onClick: () => void;
 }) {
   return (
     <button
-      className={`branch-list-item${active ? " selected" : ""}${nested ? " nested" : ""}`}
+      className={`branch-list-item${active ? " selected" : ""}${nested ? " nested" : ""}${header ? " header-item" : ""}${remoteOnly ? " remote-only-item" : ""}`}
       onClick={onClick}
-      style={color ? { borderLeftColor: color } : undefined}
+      style={color && !nested ? { borderLeftColor: color } : remoteOnly ? { borderLeftColor: color ?? colors.fgDim } : undefined}
       type="button"
     >
+      {!nested && color && <span className="branch-dot sidebar-dot" style={{ background: color }} />}
+      {nested && !remoteOnly && <span className="branch-sub-dot" />}
+      {remoteOnly && <span className="branch-sub-dot remote-only-dot" style={{ background: color ?? colors.fgDim }} />}
       <span className="branch-name">{label}</span>
       {trailing}
     </button>

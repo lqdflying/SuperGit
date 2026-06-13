@@ -79,7 +79,7 @@ describe("parseCommits", () => {
     ).join("");
 
     const commits = parseCommits(raw);
-    expect(commits[8].branchIndex).toBe(0);
+    expect(commits[8].branchIndex).toBe(1);
   });
 
   it("assigns merge parents to distinct lanes when visible", () => {

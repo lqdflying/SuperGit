@@ -16,7 +16,7 @@ interface TitleBarProps {
 export function TitleBar({ logoUri, repo, searchOpen, onToggleSearch, onRefresh, onFetch, onPull, onPush }: TitleBarProps) {
   return (
     <header className="title-bar">
-      {logoUri ? <img className="title-logo" src={logoUri} alt="" /> : <Icon type="graph" size={16} color={colors.accent} />}
+      {logoUri ? <img className="title-logo" src={logoUri} alt="" /> : <span className="title-accent-dot" />}
       <span className="title-name">Git Graph</span>
       <span className="title-repo">{repo.name}</span>
       <div className="spacer" />
