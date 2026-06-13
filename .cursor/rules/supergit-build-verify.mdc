@@ -6,6 +6,15 @@ alwaysApply: false
 
 # SuperGit Build & Verify
 
+## Fix workflow vs GA workflow
+
+| Trigger | Version | Git | Build |
+|---------|---------|-----|-------|
+| User asks to **fix** something | **Keep** current `package.json` version | No commit/push/tag/release unless asked | Yes — `npm run package` → `supergit-<version>.vsix` |
+| User says **GA** / release / version bump | **Bump** per semver (see `supergit-release`) | Commit, push, tag `v<version>`, GitHub release | Yes — package **after** version bump |
+
+After a fix, give the user the VSIX path for manual install. Do not offer commit/push unless they ask.
+
 ## Before claiming work complete
 
 ```bash
@@ -62,7 +71,3 @@ Tell the user:
 3. **Developer: Reload Window**
 
 If fixes do not appear after a same-version rebuild, remind them: uninstall → reload → install VSIX → reload (user performs these steps).
-
-## Version bumps
-
-Keep current package version for normal test VSIX builds unless the user explicitly requests GA/release/version bump.

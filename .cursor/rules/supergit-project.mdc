@@ -59,5 +59,7 @@ VS Code extension for a Git commit graph and branch tracking webview.
 - Inspect screenshots/images directly; do not guess from filenames
 - Do not revert user changes; keep fixes scoped; avoid destructive git commands unless asked
 - Prefer `rg` / `rg --files` for search
+- **Fix requests:** implement → verify → `npm run package` at **current** `package.json` version → give VSIX path. No commit/push/tag/release unless asked.
+- **GA / release:** determine semver bump → changelog → verify → package → commit → push → tag `v<version>` → GitHub release with VSIX (see `supergit-release`).
 - **Build/package VSIX only — never install or reload the extension for the user** (see `supergit-build-verify` rule)
 - **Version numbers:** read from `package.json` (`"version"`); do not hardcode versions in rules or `AGENTS.md`. VSIX = `supergit-<version>.vsix`; git tag = `v<version>`.

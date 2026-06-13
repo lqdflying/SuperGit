@@ -112,6 +112,7 @@ export function TrackingView({
 
   return (
     <section className="tracking-view">
+      <div className="tracking-scroll">
       <div className="tracking-header">
         <div className="tracking-title">Branch Tracking Relationships</div>
         <div className="tracking-subtitle">Local branches and their upstream remote tracking configuration across {remotes.length} remote{remotes.length === 1 ? "" : "s"}</div>
@@ -203,7 +204,8 @@ export function TrackingView({
           ))}
         </div>
       </div>
-      <div className="tracking-footer">
+      </div>
+      <div className="tracking-actions-dock">
         <div className="panel-heading standalone">Quick Actions</div>
         {actionBranchName ? (
           <SelectionStatus

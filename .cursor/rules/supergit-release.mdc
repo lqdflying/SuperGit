@@ -8,6 +8,15 @@ alwaysApply: false
 
 Apply **only** when the user explicitly asks for GA, release, publish prep, or a version bump.
 
+**Not for fix requests.** Bug/UI fixes use the fix workflow in `supergit-build-verify`: build at current version, no tag/release unless user later says GA.
+
+## Determine the new version
+
+1. Read current version: `package.json` → `"version"`.
+2. Read latest tag: `git tag -l 'v*' --sort=-v:refname | head -1`.
+3. Choose bump from changes since last release (semver below).
+4. Set `package.json` and `package-lock.json` to the new version before `npm run package`.
+
 ## Versioning (semver)
 
 Use `MAJOR.MINOR.PATCH` from `package.json` (format `X.Y.Z`):
@@ -24,11 +33,11 @@ Use `MAJOR.MINOR.PATCH` from `package.json` (format `X.Y.Z`):
 
 ## Checklist
 
-1. Bump `package.json` and `package-lock.json`
+1. Determine and bump version in `package.json` and `package-lock.json`
 2. Add dated `CHANGELOG.md` entry with explicit release notes
 3. Run full verify: `typecheck` → `test:coverage` → `build` → `package`
 4. Inspect VSIX: `unzip -l supergit-*.vsix` (or use version from `package.json`)
-5. Commit release changes (when user asks to commit)
+5. Commit release changes
 6. Push, tag `v<version>` matching `package.json`, create GitHub release with `supergit-<version>.vsix` asset
 7. Verify asset uploaded
 
@@ -48,6 +57,8 @@ Use `MAJOR.MINOR.PATCH` from `package.json` (format `X.Y.Z`):
 | `media/styles.css` | Webview CSS |
 
 Release checklist must include a dated `CHANGELOG.md` entry **before** `npm run package` so the packaged VSIX carries the correct notes. Icon/logo changes require rebuilding and repackaging; they are not separate publish steps.
+
+**README screenshots:** VS Code extension pages only render `https://` image URLs. Commit screenshot PNGs to the repo and push to GitHub before expecting images in the Extensions details view. Use `https://raw.githubusercontent.com/<org>/<repo>/main/assets/<file>.png` in `README.md` (or let `vsce` rewrite relative paths using `--githubBranch main` after the files are on `main`).
 
 ## Policies
 

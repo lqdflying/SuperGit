@@ -6,11 +6,11 @@ SuperGit is a VS Code extension for visual Git history and branch-to-remote trac
 
 ### Commit Graph
 
-![SuperGit commit graph with branch lanes, merge nodes, and commit detail panel](https://raw.githubusercontent.com/lqdflying/SuperGit/main/assets/CommitGraph.png)
+![SuperGit commit graph with branch lanes, merge nodes, and commit detail panel](assets/CommitGraph.png)
 
 ### Branch Tracking
 
-![SuperGit branch tracking with multi-remote ahead/behind status and quick actions](https://raw.githubusercontent.com/lqdflying/SuperGit/main/assets/BranchTracking.png)
+![SuperGit branch tracking with multi-remote ahead/behind status and quick actions](assets/BranchTracking.png)
 
 ## Features
 

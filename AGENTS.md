@@ -369,6 +369,45 @@ Branch tracking buttons look white or unthemed:
 
 ## Install And Packaging Lessons
 
+### Fix workflow (user asks to fix something)
+
+When the user reports a bug or requests a UI/behavior fix:
+
+1. Implement the fix in source.
+2. Run full verify: `typecheck` → `test:coverage` → `build` → `package`.
+3. **Keep `package.json` version unchanged** — rebuild `supergit-<version>.vsix` at the **current** version for local install/testing.
+4. Give the user the VSIX path; they install manually.
+5. **Do not** commit, push, tag, or create a GitHub release unless the user explicitly asks.
+
+Same-version reinstall is normal for fix iterations. Remind the user to uninstall → reload → install VSIX → reload if the UI does not update.
+
+### GA workflow (user says GA / release / version bump)
+
+When the user explicitly asks for GA, release, or a version bump:
+
+1. **Determine the correct new version** from semver (see GA Release Policy): breaking → MAJOR, new features → MINOR, fixes/polish → PATCH. Compare with latest git tag (`git tag -l 'v*'`).
+2. Bump `package.json` and `package-lock.json`.
+3. Add dated `CHANGELOG.md` entry.
+4. Run full verify and `npm run package` **after** the version bump.
+5. Commit release changes (when user asks to commit, or as part of GA).
+6. Push, create tag `v<version>`, create GitHub release with `supergit-<version>.vsix`.
+7. Verify the release asset uploaded.
+
+Do not mix workflows: a fix request is build-only at current version; GA is version bump + git + release + build.
+
+### README screenshots
+
+Use **relative paths** in source `README.md` (e.g. `assets/CommitGraph.png`) so GitHub renders them when the PNGs are committed on `main`.
+
+The **Extensions details page cannot load relative paths** from the installed VSIX — VS Code only allows `https://` images there. On `npm run package`, `vsce` rewrites relative image links to GitHub raw URLs using `package.json` → `repository` and `--githubBranch main`. Requirements:
+
+1. Screenshot PNGs committed and **pushed** to `main` before images work in the extension page.
+2. Rebuild/reinstall the VSIX after packaging so `extension/readme.md` contains the rewritten `https://` URLs.
+
+Do not expect relative paths alone to work in the installed extension details view without `vsce` rewrite + GitHub hosting.
+
+### Build commands
+
 Build and package:
 
 ```bash
@@ -378,7 +417,7 @@ npm run build
 npm run package
 ```
 
-For normal test VSIX builds, keep the current package version unless the user explicitly asks for a GA/release/version bump. Same-version test builds are acceptable, but stale installs are common; tell the user to uninstall/reload/reinstall when needed.
+For local fix builds, keep the current `package.json` version. Version bumps happen only in the GA workflow.
 
 **Version source of truth:** `package.json` → `"version"`. Do not hardcode version numbers in this file or in `.cursor/rules/`.
 

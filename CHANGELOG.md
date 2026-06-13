@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.1 - 2026-06-13
+
+### Added
+
+- README screenshots for Commit Graph and Branch Tracking on the extension details page.
+- `assets/CommitGraph.png` and `assets/BranchTracking.png` bundled with the extension.
+
+### Changed
+
+- Branch tracking Quick Actions dock stays pinned at the bottom while scrolling long branch lists.
+- `vsce package` uses `--githubBranch main` so README screenshot links rewrite to GitHub raw URLs.
+- Agent docs: fix vs GA workflow, dynamic version resolution, README screenshot packaging rules.
+
+### Fixed
+
+- Extension details page screenshots now resolve after PNGs are on `main` and the VSIX is rebuilt (relative README paths are rewritten to HTTPS on package).
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (67 tests)
+- `npm run build`
+- `npm run package`
+
 ## 1.0.0 - 2026-06-13
 
 ### Added
