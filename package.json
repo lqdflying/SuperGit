@@ -3,7 +3,7 @@
   "displayName": "SuperGit",
   "description": "Visual Git commit history and branch tracking with multi-remote support",
   "version": "0.1.0",
-  "publisher": "supergit",
+  "publisher": "lqdflying",
   "license": "MIT",
   "repository": {
     "type": "git",

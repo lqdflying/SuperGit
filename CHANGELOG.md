@@ -24,6 +24,7 @@
 - Webview implementation split into design-aligned components under `src/webview/components/`.
 - Status bar now displays last-fetched timing when data is loaded.
 - Webview JSX bundling now uses the automatic React runtime, preventing `React is not defined` render failures.
+- Publisher ID is `lqdflying` for VS Code Marketplace publishing.
 
 ### Verified
 
