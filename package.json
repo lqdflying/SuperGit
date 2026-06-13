@@ -85,7 +85,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:integration": "node ./dist/test/runTest.js",
-    "package": "vsce package --no-dependencies --allow-missing-repository"
+    "package": "vsce package --no-dependencies --allow-missing-repository --githubBranch main"
   },
   "dependencies": {
     "react": "^18.3.0",

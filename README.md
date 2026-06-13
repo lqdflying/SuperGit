@@ -2,6 +2,16 @@
 
 SuperGit is a VS Code extension for visual Git history and branch-to-remote tracking. It opens a dark, VS Code-native webview with a commit graph, branch tracking diagram, multi-remote status, date/search controls, and guarded Git actions.
 
+## Screenshots
+
+### Commit Graph
+
+![SuperGit commit graph with branch lanes, merge nodes, and commit detail panel](https://raw.githubusercontent.com/lqdflying/SuperGit/main/assets/CommitGraph.png)
+
+### Branch Tracking
+
+![SuperGit branch tracking with multi-remote ahead/behind status and quick actions](https://raw.githubusercontent.com/lqdflying/SuperGit/main/assets/BranchTracking.png)
+
 ## Features
 
 - Commit graph with branch lanes, merge nodes, refs, tags, author/date/hash columns, and commit detail panel.
@@ -108,6 +118,6 @@ Current local verification:
 - TypeScript typecheck passes.
 - Unit tests pass: 67 tests.
 - Coverage passes the design target for `src/git/*.ts`.
-- VSIX packaging passes and includes `CHANGELOG.md`, `README.md`, `LICENSE`, `assets/icon.png`, `assets/logo.png`, bundled extension/webview JavaScript, and CSS.
+- VSIX packaging passes and includes `CHANGELOG.md`, `README.md`, `LICENSE`, `assets/icon.png`, `assets/logo.png`, `assets/CommitGraph.png`, `assets/BranchTracking.png`, bundled extension/webview JavaScript, and CSS.
 
 `npm run test:integration` requires a desktop-capable VS Code/Electron environment. In the current managed container, Electron exits before extension load due to sandbox/display restrictions.
