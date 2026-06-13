@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.1 - 2026-06-13
+
+### Fixed
+
+- Commit Graph **All** date range now loads the full history in one scrollable list instead of capping at 8 commits per page.
+- Graph panel layout constrains height correctly so the commit list scrolls inside the panel.
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (68 tests)
+- `npm run build`
+- `npm run package`
+
 ## 1.1.0 - 2026-06-13
 
 ### Added

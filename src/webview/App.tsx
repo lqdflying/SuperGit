@@ -329,7 +329,9 @@ export function App() {
                   }}
                   onShowCustom={() => setCustomRange(customFrom, customTo)}
                 />
-                <CommitTable commits={commits} selectedHash={selectedHash} onSelect={setSelectedHash} />
+                <div className="commit-table-panel">
+                  <CommitTable commits={commits} selectedHash={selectedHash} onSelect={setSelectedHash} />
+                </div>
                 {pagination.enabled && (
                   <PaginationBar
                     pagination={pagination}

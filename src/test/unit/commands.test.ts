@@ -39,12 +39,11 @@ describe("getCommits", () => {
     expect(logCall?.[0].some((arg) => arg.startsWith("--after="))).toBe(true);
   });
 
-  it("passes --skip and -n for all-mode pagination", async () => {
+  it("loads full history in all mode without git pagination", async () => {
     await getCommits("/repo", { mode: "preset", presetDays: null }, 2, 8);
     const logCall = mockedRunGit.mock.calls.find(([args]) => args[0] === "log");
-    expect(logCall?.[0]).toContain("--skip=16");
-    expect(logCall?.[0]).toContain("-n");
-    expect(logCall?.[0]).toContain("8");
+    expect(logCall?.[0]).not.toContain("--skip=");
+    expect(logCall?.[0]).not.toContain("-n");
   });
 
   it("passes custom date range args", async () => {

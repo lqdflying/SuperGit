@@ -17,16 +17,10 @@ export async function getCommits(
   const remotes = await getRemotes(cwd);
   const remoteNames = remotes.map((remote) => remote.name);
   const needsClientFilter = searchText.trim().length > 0;
-  const allMode = dateRange.mode === "preset" && dateRange.presetDays === null;
-  const shouldPaginate = needsClientFilter || allMode;
   const args = ["log", "--date-order", `--format=${GIT_LOG_FORMAT}`];
 
   addDateArgs(args, dateRange);
   addScopeArgs(args, scope);
-
-  if (!needsClientFilter && allMode) {
-    args.push(`--skip=${page * pageSize}`, "-n", `${pageSize}`);
-  }
 
   const result = await runGit(args, cwd);
   if (result.exitCode !== 0) {
@@ -45,7 +39,7 @@ export async function getCommits(
     commits: paginated,
     total,
     pagination: {
-      enabled: shouldPaginate && total > pageSize,
+      enabled: needsClientFilter && total > pageSize,
       page,
       pageSize,
       totalItems: total,
