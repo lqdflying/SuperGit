@@ -2,9 +2,9 @@ import type { DateRange } from "../../../shared/types";
 import { Icon } from "../../icons";
 
 const presets: Array<{ label: string; days: 7 | 14 | 30 | null }> = [
-  { label: "7 days", days: 7 },
-  { label: "14 days", days: 14 },
-  { label: "30 days", days: 30 },
+  { label: "7d", days: 7 },
+  { label: "14d", days: 14 },
+  { label: "30d", days: 30 },
   { label: "All", days: null }
 ];
 
@@ -24,7 +24,6 @@ export function DateRangeBar({ dateRange, customFrom, customTo, total, onPreset,
   return (
     <div className="date-range-bar">
       <Icon type="calendar" size={13} />
-      <span className="muted">Range:</span>
       {presets.map((preset) => (
         <button className={`range-button${dateRange.mode === "preset" && dateRange.presetDays === preset.days ? " active" : ""}`} key={preset.label} onClick={() => onPreset(preset.days)} type="button">
           {preset.label}
@@ -42,7 +41,7 @@ export function DateRangeBar({ dateRange, customFrom, customTo, total, onPreset,
         </>
       )}
       <div className="spacer" />
-      <span className="muted">{total} commit{total === 1 ? "" : "s"}</span>
+      <span className="muted">{total} commits</span>
     </div>
   );
 }

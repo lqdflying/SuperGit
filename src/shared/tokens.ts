@@ -1,30 +1,35 @@
 export const colors = {
-  bg0: "#1e1e1e",
-  bg1: "#252526",
-  bg2: "#2d2d2d",
-  bg3: "#333333",
-  bg4: "#3c3c3c",
-  border: "#3c3c3c",
-  fg: "#cccccc",
-  fgDim: "#858585",
-  fgBright: "#e0e0e0",
-  accent: "#0078d4",
-  accentHover: "#1a8ad4",
-  branch: ["#4fc1ff", "#c586c0", "#dcdcaa", "#6a9955", "#ce9178", "#9cdcfe"],
-  ahead: "#73c991",
-  behind: "#f48771",
-  upToDate: "#4fc1ff",
-  untracked: "#858585",
-  remoteColorPool: ["#569cd6", "#c586c0", "#6a9955", "#ce9178", "#dcdcaa"],
-  selection: "rgba(0,120,212,0.15)",
-  hover: "rgba(255,255,255,0.04)",
-  tagBg: "#b5890033",
-  tagFg: "#e2c08d"
+  bg0: "#0d1117",
+  bg1: "#161b22",
+  bg2: "#1c2129",
+  bg3: "#21262d",
+  bg4: "#292e36",
+  border: "#30363d",
+  borderSubtle: "#21262d",
+  fg: "#c9d1d9",
+  fgDim: "#6e7681",
+  fgMuted: "#484f58",
+  fgBright: "#e6edf3",
+  accent: "#2f81f7",
+  accentHover: "#1f6feb",
+  branch: ["#58a6ff", "#d2a8ff", "#7ee787", "#ffa657", "#ff7b72", "#79c0ff", "#f778ba", "#a5d6ff"],
+  ahead: "#56d364",
+  behind: "#f85149",
+  upToDate: "#58a6ff",
+  synced: "#58a6ff",
+  untracked: "#484f58",
+  trackArrow: "#6e7681",
+  remoteColorPool: ["#58a6ff", "#d2a8ff", "#7ee787", "#ffa657"],
+  selection: "rgba(47,129,247,0.12)",
+  hover: "rgba(136,198,255,0.04)",
+  tagBg: "rgba(210,168,255,0.12)",
+  tagBorder: "rgba(210,168,255,0.3)",
+  tagFg: "#d2a8ff"
 } as const;
 
 export const typography = {
-  fontFamily: "'Segoe UI', -apple-system, system-ui, sans-serif",
-  monoFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace",
+  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+  monoFamily: "'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace",
   xs: 9,
   sm: 10,
   md: 11,
@@ -34,9 +39,9 @@ export const typography = {
 } as const;
 
 export const graph = {
-  laneWidth: 22,
-  rowHeight: 42,
-  nodeRadius: 5,
+  laneWidth: 24,
+  rowHeight: 34,
+  nodeRadius: 4.5,
   mergeSize: 12,
-  visibleLanes: 6
+  visibleLanes: 8
 } as const;

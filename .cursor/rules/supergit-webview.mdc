@@ -71,9 +71,15 @@ Implementation: `src/webview/components/tracking/TrackingView.tsx`
 ### Selection
 
 - Click **local branch pill** or **remote row** to choose push/pull target
-- State: `selectedBranchName` + optional `selectedRemote`; default = checked-out branch
+- State: `selectedBranchName` + optional `selectedRemote` + `selectedRemoteOnly` for refs with no local branch
 - `.current` = checked out; `.selected` = chosen for Quick Actions (separate styles)
 - Clicking a remote row sets branch + remote so counts come from that tracking ref
+
+### Remote-only branches
+
+- Pass `remoteBranches` from `App.tsx` into `TrackingView` (same payload as `BranchSidebar`)
+- Build rows with `buildTrackingRows(branches, remoteBranches)` — append entries where `!localBranchName`
+- Remote-only selection: status `remote-only`, primary **Create Local Branch** (pull/fetch `remote:branch`), push/set-upstream disabled
 
 ### Proposed actions from sync status
 
@@ -84,6 +90,7 @@ Implementation: `src/webview/components/tracking/TrackingView.tsx`
 | behind | disabled | primary (`Pull N`) |
 | diverged | primary | primary |
 | no-upstream | disabled | disabled; highlight Set Upstream |
+| remote-only | disabled | primary (Create Local Branch) |
 
 - Show `tracking-selection-status` card: `local → remote/ref` + recommendation
 - Use `.quick-button.primary` for recommended action(s)

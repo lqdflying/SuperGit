@@ -1,5 +1,5 @@
 import { colors } from "../shared/tokens";
-import type { BranchInfo } from "../shared/types";
+import type { BranchInfo, RemoteBranchInfo } from "../shared/types";
 
 export function branchColor(index: number): string {
   return colors.branch[index % colors.branch.length];
@@ -9,10 +9,53 @@ export function blockHeight(branch: BranchInfo): number {
   return Math.max(branch.remotes.length, 1) * 32 + 16;
 }
 
+export function remoteOnlyBlockHeight(): number {
+  return 32 + 16;
+}
+
+export type TrackingRow =
+  | { kind: "local"; branch: BranchInfo }
+  | { kind: "remote-only"; remoteBranch: RemoteBranchInfo };
+
+export function buildTrackingRows(branches: BranchInfo[], remoteBranches: RemoteBranchInfo[]): TrackingRow[] {
+  const rows: TrackingRow[] = branches.map((branch) => ({ kind: "local", branch }));
+  for (const remoteBranch of remoteBranches) {
+    if (!remoteBranch.localBranchName) {
+      rows.push({ kind: "remote-only", remoteBranch });
+    }
+  }
+  return rows;
+}
+
+export function trackingRowHeight(row: TrackingRow): number {
+  return row.kind === "local" ? blockHeight(row.branch) : remoteOnlyBlockHeight();
+}
+
 export function defaultDate(offsetDays: number): string {
   const date = new Date();
   date.setDate(date.getDate() + offsetDays);
   return date.toISOString().slice(0, 10);
+}
+
+export function formatRelativeTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 3600) {
+    return `${Math.floor(seconds / 60)}m ago`;
+  }
+  const hours = Math.floor(seconds / 3600);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+  const days = Math.floor(seconds / 86400);
+  if (days < 7) {
+    return `${days}d ago`;
+  }
+  return date.toISOString().slice(5, 10);
 }
 
 export function formatShortDate(value: string): string {

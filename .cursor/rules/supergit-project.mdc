@@ -10,8 +10,8 @@ VS Code extension for a Git commit graph and branch tracking webview.
 ## Source of truth
 
 - Product behavior/UI: read all files in `Design/` before UI or behavior changes.
-- Spec: `Design/git-graph-extension-spec.md`
-- Visual reference: `Design/git-graph-extension-ui-v2.jsx`
+- Spec: `Design/git-graph-extension-spec-v4.md`
+- Visual reference: `Design/git-graph-v4-final.jsx`
 - Assets: `assets/icon.png` (package/panel icon), `assets/logo.png` (webview logo)
 
 ## Design goals
@@ -20,7 +20,7 @@ VS Code extension for a Git commit graph and branch tracking webview.
 - Commit graph tab, branch tracking tab, multi-remote visibility, guarded Git actions
 - Stable dimensions for graph lanes, sidebars, toolbar, rows, status areas
 - Do not replace real UI with explanatory placeholder text
-- Branch tracking actions must be **contextual**: after selection, show ahead/behind/synced/diverged/no-upstream and enable/highlight only sensible push/pull/upstream actions
+- Branch tracking actions must be **contextual**: after selection, show ahead/behind/synced/diverged/no-upstream/**remote-only** and enable/highlight only sensible push/pull/upstream actions
 
 ## Architecture
 
@@ -50,6 +50,7 @@ VS Code extension for a Git commit graph and branch tracking webview.
 - Checked-out pull: `git pull --ff-only <remote> <branch>`
 - After successful branch actions in `runBranchAction`, refresh in order: `loadBranches` → `loadRemotes` → `loadCommits` when history changed
 - Webview must pass explicit `branchName` and `remote` on `execute-branch-action` for Tracking tab selection
+- **Remote-only refs** (on remote, no local branch): `getRemoteBranches()` sets `localBranchName` only when a matching `refs/heads/<name>` exists. Both `BranchSidebar` and `TrackingView` must consume `remoteBranches` and show refs where `localBranchName` is unset — not only local rows from `getBranches()`.
 
 ## Agent policy
 

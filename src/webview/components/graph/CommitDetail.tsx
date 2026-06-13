@@ -1,7 +1,9 @@
 import { colors } from "../../../shared/tokens";
 import type { CommitAction, CommitFileChange, CommitNode } from "../../../shared/types";
+import { Avatar } from "../Avatar";
+import { HeadBadge, RefBadge, TagBadge } from "../badges";
 import { Icon, type IconName } from "../../icons";
-import { branchColor, formatFullDate } from "../../utils";
+import { branchColor, formatFullDate, formatRelativeTime } from "../../utils";
 
 const statusLabels: Record<CommitFileChange["status"], string> = {
   added: "A",
@@ -35,27 +37,43 @@ export function CommitDetail({
     );
   }
 
+  const color = branchColor(commit.branchIndex);
   const actionRows: Array<{ action: CommitAction; label: string; icon: IconName }> = [
-    { action: "checkout", label: "Checkout this commit", icon: "commit" },
-    { action: "cherry-pick", label: "Cherry-pick", icon: "branch" },
+    { action: "cherry-pick", label: "Cherry-pick commit", icon: "branch" },
     { action: "revert", label: "Revert commit", icon: "refresh" },
+    { action: "checkout", label: "Checkout", icon: "commit" },
     { action: "create-branch", label: "Create branch here", icon: "plus" },
     { action: "create-tag", label: "Create tag", icon: "tag" },
-    { action: "copy-hash", label: "Copy hash", icon: "copy" }
+    { action: "copy-hash", label: "Copy SHA", icon: "copy" }
   ];
 
   return (
     <aside className="detail-panel">
       <div className="detail-section">
-        <div className="panel-heading standalone">Commit Detail</div>
-        <div className="detail-title">{commit.message}</div>
-        <DetailRow label="Hash" value={commit.hash} mono color={branchColor(commit.branchIndex)} />
-        <DetailRow label="Author" value={commit.author} />
-        <DetailRow label="Date" value={formatFullDate(commit.date)} mono />
-        <DetailRow label="Branch" value={commit.branch} color={branchColor(commit.branchIndex)} />
-        {commit.parents.length > 0 && <DetailRow label="Parents" value={commit.parents.join(", ")} mono />}
-        {commit.isMerge && <DetailRow label="Type" value="Merge commit" color={colors.branch[2]} />}
-        {commit.tags.length > 0 && <DetailRow label="Tags" value={commit.tags.join(", ")} color={colors.tagFg} />}
+        <div className="detail-header">
+          <Avatar name={commit.author} size={32} />
+          <div className="detail-header-copy">
+            <strong>{commit.author}</strong>
+            <span>{formatRelativeTime(commit.date)}</span>
+          </div>
+        </div>
+        <p className="detail-title">{commit.message}</p>
+        <div className="detail-badges">
+          {commit.refs.includes("HEAD") && <HeadBadge />}
+          {commit.refs.filter((ref) => ref !== "HEAD").map((ref) => (
+            <RefBadge key={ref} text={ref} color={color} />
+          ))}
+          {commit.tags.map((tag) => (
+            <TagBadge key={tag} text={tag} />
+          ))}
+        </div>
+        <div className="detail-meta">
+          <DetailRow label="Commit" value={commit.hash} mono />
+          <DetailRow label="Parents" value={commit.parents.join(" ") || "none"} mono />
+          <DetailRow label="Branch" value={commit.branch || "-"} color={color} />
+          {commit.isMerge && <DetailRow label="Type" value="Merge commit" color={colors.fgDim} />}
+          <DetailRow label="Date" value={formatFullDate(commit.date)} mono />
+        </div>
       </div>
       <div className="detail-section">
         <div className="panel-heading standalone">Changed Files</div>

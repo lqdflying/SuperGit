@@ -358,7 +358,7 @@ export function App() {
             </div>
           </>
         ) : (
-          <TrackingView branches={branches} remotes={remotes} currentBranch={repo.currentBranch} onBranchAction={executeBranch} />
+          <TrackingView branches={branches} remoteBranches={remoteBranches} remotes={remotes} currentBranch={repo.currentBranch} onBranchAction={executeBranch} />
         )}
       </main>
 

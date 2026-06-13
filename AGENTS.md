@@ -30,15 +30,23 @@ These notes capture the practical lessons from building and debugging the SuperG
 
 Fine-tuning session notes for `src/webview/components/tracking/TrackingView.tsx` and related Git action wiring.
 
-### Selection Model
+### Selection
 
-- Users choose the push/pull target by clicking a **local branch pill** or a **remote row**.
-- Keep two pieces of state: `selectedBranchName` and optional `selectedRemote`.
-- Default selection is the checked-out branch; reset only when the branch list changes and the prior selection disappears.
+- Click **local branch pill** or **remote row** to choose push/pull target
+- State: `selectedBranchName` + optional `selectedRemote` + `selectedRemoteOnly` when the row has no local branch
+- Default selection is the checked-out branch; reset only when the branch list changes and the prior selection disappears
 - Visual states are separate:
   - `.current` = checked out in Git
   - `.selected` = chosen for Quick Actions
 - Clicking a remote row should set both branch and remote so ahead/behind counts come from that exact tracking ref.
+
+### Remote-only branches
+
+- Data: `branches-data` includes both `branches` (local + tracking counts) and `remoteBranches` (all `refs/remotes/*` minus `/HEAD`, with optional `localBranchName`).
+- `buildTrackingRows()` in `src/webview/utils.ts` merges local `BranchInfo[]` with remote-only `RemoteBranchInfo[]` (`!localBranchName`).
+- **Commit graph sidebar** (`BranchSidebar`): section label `Remote-only`, grouped by remote.
+- **Branch tracking** (`TrackingView`): section label `Remote-only` across LOCAL / TRACKS / REMOTES; LOCAL column shows `no local branch`; dashed arrow in TRACKS.
+- Selection status `remote-only`: headline *Remote branch only*; primary action **Create Local Branch** (`git fetch <remote> <branch>:<branch>` via existing pull path). Disable push and set-upstream until a local branch exists.
 
 ### Proposed Actions From Sync Status
 
@@ -51,6 +59,7 @@ When a branch is selected, derive status from the chosen tracking ref (upstream 
 | behind | N commits behind | disabled | primary (`Pull N`) |
 | diverged | N ahead, M behind | primary | primary |
 | no-upstream | No upstream configured | disabled | disabled; highlight Set Upstream |
+| remote-only | Remote branch only | disabled | primary (`Create Local Branch`) |
 
 - Show a compact status card (`tracking-selection-status`) above Quick Actions with `local → remote/ref` and a one-line recommendation.
 - Use `.quick-button.primary` for the recommended action(s).
@@ -108,6 +117,10 @@ Fine-tuning notes for commit graph/detail work in the same session:
 - Render merge-parent continuation stubs in `CommitTable` when an off-page parent would otherwise break lane continuity.
 - Keep commit table metadata on one line: widen AUTHOR/DATE/HASH columns and use `white-space: nowrap`.
 - `formatShortDate` in `src/webview/utils.ts` should render `MM/DD HH:mm` (24h).
+- Commit list dates in the graph table use `formatRelativeTime()` (`5m ago`, `2h ago`, …).
+- Visual tokens live in `src/shared/tokens.ts` (GitHub-dark palette, 8 lane colors); graph density: `laneWidth` 24, `rowHeight` 34, `visibleLanes` 8.
+- `GraphCanvas` uses bezier edges with SVG glow filters; merge nodes = ring + inner dot; HEAD = dashed outer ring.
+- Shared UI: `Avatar.tsx`, `badges.tsx` (`RefBadge`, `TagBadge`, `HeadBadge`).
 
 ## Extension Architecture
 
@@ -523,7 +536,7 @@ npm run package
 
 Current expected unit status:
 
-- 67 tests passing.
+- 68 tests passing.
 - Coverage above the design target for `src/git/*.ts`.
 
 `npm run test:integration` may fail in managed containers because Electron cannot start before extension load due to sandbox/display restrictions. Report this clearly instead of treating it as a product failure.

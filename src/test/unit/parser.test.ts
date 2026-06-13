@@ -74,12 +74,12 @@ describe("parseCommits", () => {
   });
 
   it("cycles lanes after visible lane count", () => {
-    const raw = ["a", "b", "c", "d", "e", "f", "g"]
-      .map((branch, index) => commitRecord([`hash${index}`, `h${index}`, "msg", "dev", "d@e", "2026-06-13T00:00:00Z", "", branch]))
-      .join("");
+    const raw = Array.from({ length: 9 }, (_, index) =>
+      commitRecord([`hash${index}`, `h${index}`, "msg", "dev", "d@e", "2026-06-13T00:00:00Z", "", `branch${index}`])
+    ).join("");
 
     const commits = parseCommits(raw);
-    expect(commits[6].branchIndex).toBe(0);
+    expect(commits[8].branchIndex).toBe(0);
   });
 
   it("assigns merge parents to distinct lanes when visible", () => {

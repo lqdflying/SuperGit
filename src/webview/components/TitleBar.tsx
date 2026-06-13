@@ -17,7 +17,7 @@ export function TitleBar({ logoUri, repo, searchOpen, onToggleSearch, onRefresh,
   return (
     <header className="title-bar">
       {logoUri ? <img className="title-logo" src={logoUri} alt="" /> : <Icon type="graph" size={16} color={colors.accent} />}
-      <span className="title-name">SUPERGIT</span>
+      <span className="title-name">Git Graph</span>
       <span className="title-repo">{repo.name}</span>
       <div className="spacer" />
       <ToolbarButton icon="search" active={searchOpen} label="Search" onClick={onToggleSearch} />
