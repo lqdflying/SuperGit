@@ -10,7 +10,7 @@ vi.mock("../../git/api", () => ({
   getActiveRepository: vi.fn().mockResolvedValue({ root: "/repo", name: "repo", currentBranch: "main" })
 }));
 
-import { getAheadBehind, getBranches, getCommits, getCurrentBranch, getRemotes, getRepositoryState } from "../../git/commands";
+import { getAheadBehind, getBranches, getCommitFileChanges, getCommits, getCurrentBranch, getRemoteBranches, getRemotes, getRepositoryState } from "../../git/commands";
 import { getActiveRepository } from "../../git/api";
 import { runGit } from "../../git/runner";
 
@@ -98,6 +98,130 @@ describe("getCommits", () => {
     expect(result.commits).toHaveLength(2);
     expect(result.pagination.enabled).toBe(true);
     expect(result.pagination.totalPages).toBe(2);
+  });
+
+  it("uses --all for all-branches scope", async () => {
+    await getCommits("/repo", { mode: "preset", presetDays: 7 }, 0, 8, "", { type: "all" });
+    const logCall = mockedRunGit.mock.calls.find(([args]) => args[0] === "log");
+    const countCall = mockedRunGit.mock.calls.find(([args]) => args[0] === "rev-list");
+    expect(logCall?.[0]).toContain("--all");
+    expect(countCall?.[0]).toContain("--all");
+  });
+
+  it("scopes local branch history to the branch ref", async () => {
+    await getCommits("/repo", { mode: "preset", presetDays: 7 }, 0, 8, "", { type: "local", ref: "feature/x", branchName: "feature/x" });
+    const logCall = mockedRunGit.mock.calls.find(([args]) => args[0] === "log");
+    const countCall = mockedRunGit.mock.calls.find(([args]) => args[0] === "rev-list");
+    expect(logCall?.[0]).toContain("feature/x");
+    expect(logCall?.[0]).not.toContain("--all");
+    expect(countCall?.[0]).toContain("feature/x");
+    expect(countCall?.[0]).not.toContain("--all");
+  });
+
+  it("scopes remote branch history to the remote ref", async () => {
+    await getCommits("/repo", { mode: "preset", presetDays: 7 }, 0, 8, "", {
+      type: "remote",
+      ref: "origin/feature/x",
+      remote: "origin",
+      branchName: "feature/x"
+    });
+    const logCall = mockedRunGit.mock.calls.find(([args]) => args[0] === "log");
+    expect(logCall?.[0]).toContain("origin/feature/x");
+    expect(logCall?.[0]).not.toContain("--all");
+  });
+
+  it("keeps search and pagination inside a selected scope", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "remote") {
+        return ok("");
+      }
+      if (args[0] === "log") {
+        return ok(Array.from({ length: 6 }, (_, index) => commitRecord(`hash${index}`, `feature ${index}`)).join(""));
+      }
+      if (args[0] === "rev-list") {
+        return ok("6\n");
+      }
+      return ok("");
+    });
+
+    const result = await getCommits(
+      "/repo",
+      { mode: "preset", presetDays: null },
+      1,
+      4,
+      "feature",
+      { type: "local", ref: "feature/x", branchName: "feature/x" }
+    );
+    const logCall = mockedRunGit.mock.calls.find(([args]) => args[0] === "log");
+    expect(logCall?.[0]).toContain("feature/x");
+    expect(logCall?.[0]).not.toContain("--all");
+    expect(result.commits).toHaveLength(2);
+    expect(result.pagination.enabled).toBe(true);
+  });
+});
+
+describe("getRemoteBranches", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("discovers remote-only branches and links local names when present", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "for-each-ref" && args.includes("refs/remotes/")) {
+        return ok("origin/main\norigin/feature/x\nupstream/release\n");
+      }
+      if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {
+        return ok("main\nfeature/x\n");
+      }
+      if (args[0] === "remote") {
+        return ok("origin\turl (fetch)\nupstream\turl2 (fetch)\n");
+      }
+      return ok("");
+    });
+
+    const remoteBranches = await getRemoteBranches("/repo");
+    expect(remoteBranches).toHaveLength(3);
+    expect(remoteBranches.find((branch) => branch.ref === "origin/main")?.localBranchName).toBe("main");
+    expect(remoteBranches.find((branch) => branch.ref === "upstream/release")?.localBranchName).toBeUndefined();
+  });
+});
+
+describe("getCommitFileChanges", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("loads changed files against the first parent for normal commits", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "rev-list") {
+        return ok("abc123 parent1\n");
+      }
+      if (args[0] === "diff") {
+        return ok("M\tsrc/app.ts\nA\tsrc/new.ts\n");
+      }
+      return ok("");
+    });
+
+    const result = await getCommitFileChanges("/repo", "abc123");
+    expect(result.baseHash).toBe("parent1");
+    expect(result.files).toEqual([
+      { path: "src/app.ts", status: "modified", rawStatus: "M" },
+      { path: "src/new.ts", status: "added", rawStatus: "A" }
+    ]);
+    expect(mockedRunGit).toHaveBeenCalledWith(["diff", "--name-status", "-M", "parent1", "abc123"], "/repo");
+  });
+
+  it("loads root commit files with diff-tree --root", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "rev-list") {
+        return ok("root123\n");
+      }
+      if (args[0] === "diff-tree") {
+        return ok("A\tREADME.md\n");
+      }
+      return ok("");
+    });
+
+    const result = await getCommitFileChanges("/repo", "root123");
+    expect(result.baseHash).toBeUndefined();
+    expect(result.files[0]).toMatchObject({ path: "README.md", status: "added" });
+    expect(mockedRunGit).toHaveBeenCalledWith(["diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", "root123"], "/repo");
   });
 });
 

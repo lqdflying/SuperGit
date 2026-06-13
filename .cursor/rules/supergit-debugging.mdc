@@ -1,0 +1,46 @@
+---
+description: SuperGit debug logging, remote VS Code Server logs, and symptom diagnosis
+alwaysApply: false
+---
+
+# SuperGit Debugging
+
+## Enable debug
+
+```json
+{ "superGit.debug": true }
+```
+
+Logger: `src/logger.ts`. `info`/`warn`/`error` always log; `debug` only when setting is true.
+
+Log file (typical): `~/.vscode-server/data/logs/<session>/exthost*/supergit.supergit/supergit.log`
+
+Find latest:
+
+```bash
+find ~/.vscode-server/data/logs -path '*supergit.supergit/supergit.log' -type f -printf '%T@ %p\n' | sort -n | tail -1
+```
+
+Search narrowly (avoid broad `rg` over all VS Code logs):
+
+```bash
+rg -n "webview:|command invoked|creating SuperGit|error|warn|failed" ~/.vscode-server/data/logs/<session>/exthostN
+```
+
+## Symptom → check
+
+| Symptom | Check |
+|---------|-------|
+| No status-bar button | `activationEvents`, status bar `command`, `remoteexthost.log` activation |
+| Click does nothing | `command invoked {"command":"superGit.show"}` in logs |
+| Stuck on "Loading Git graph..." | CSP, nonce, `scriptUri`, `localResourceRoots`; then React/JSX runtime |
+| `html loaded` but no `bundle loaded` | Script blocked or failed to load |
+| `bundle loaded` but no `app mounted` | React crash (often `React is not defined`) |
+| `mounted` but no data | `webview message received {"type":"ready"}`; then Git/repo logs |
+| `ready` but no commits | Repository root, `vscode.git` API, `src/git/runner.ts` logs, workspace is a git repo |
+| Pull completed but tracking counts unchanged | Selected branch may not have been updated (non-checked-out `git pull` merges into current branch); confirm `branches loaded` after action |
+| Branch tracking buttons look white/unthemed | Global transparent `button` reset in `media/styles.css`; set dark backgrounds on `.local-branch-pill`, `.remote-row`, `.quick-button`, `.branch-list-item`, `.file-change-item` |
+
+## UI failure checklist
+
+Enable debug → reload → open SuperGit → `SuperGit: Show Logs` → confirm full stage chain through `commits loaded`, `branches loaded`, `remotes loaded`. Debug from the first missing stage.

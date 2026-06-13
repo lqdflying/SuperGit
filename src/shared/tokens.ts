@@ -34,7 +34,7 @@ export const typography = {
 } as const;
 
 export const graph = {
-  laneWidth: 28,
+  laneWidth: 22,
   rowHeight: 42,
   nodeRadius: 5,
   mergeSize: 12,

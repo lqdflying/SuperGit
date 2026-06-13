@@ -1,0 +1,43 @@
+---
+description: SuperGit GA release and version bump checklist (only when user requests release)
+globs: package.json,package-lock.json,CHANGELOG.md
+alwaysApply: false
+---
+
+# SuperGit GA Release
+
+Apply **only** when the user explicitly asks for GA, release, publish prep, or a version bump.
+
+## Versioning (semver)
+
+Use `MAJOR.MINOR.PATCH` (e.g. `1.0.0`):
+
+| Bump | When | Examples |
+|------|------|----------|
+| **MAJOR** (`X`.0.0) | **Breaking changes only** — incompatible behavior, removed commands/settings, or workflow changes that break existing users | Renamed commands, removed webview message contracts, changed default Git action semantics |
+| **MINOR** (1.`Y`.0) | New backward-compatible features | New tabs, filters, actions, UI capabilities |
+| **PATCH** (1.0.`Z`) | Backward-compatible bug fixes and polish | Pull refresh fix, styling, logging, docs |
+
+- Do **not** bump MAJOR for new features alone.
+- Pre-GA test builds may stay on the same version; GA milestones use explicit version bumps (e.g. first GA → `1.0.0`).
+
+## Checklist
+
+1. Bump `package.json` and `package-lock.json`
+2. Add dated `CHANGELOG.md` entry with explicit release notes
+3. Run full verify: `typecheck` → `test:coverage` → `build` → `package`
+4. Inspect VSIX: `unzip -l supergit-*.vsix`
+5. Commit release changes (when user asks to commit)
+6. Push, tag `vX.Y.Z`, create GitHub release with VSIX asset
+7. Verify asset uploaded
+8. Update `AGENTS.md` / build-verify rule VSIX path if the version changed
+
+## Policies
+
+- Do **not** publish to VS Code Marketplace from agent actions unless maintainer explicitly requests and provides credentials
+- Release notes must reflect changelog/actual commits, not auto-generated fluff only
+- To redo same version: delete GitHub release/tag, fix, rebuild, recommit, retag, recreate release
+
+## VSIX dependency note
+
+Before GA, re-check whether `--no-dependencies` is still correct. If any runtime dep is not bundled, fix packaging before release.

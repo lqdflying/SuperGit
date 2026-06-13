@@ -13,6 +13,11 @@ export interface CommitNode {
   isMerge: boolean;
 }
 
+export type HistoryScope =
+  | { type: "all" }
+  | { type: "local"; ref: string; branchName: string }
+  | { type: "remote"; ref: string; remote: string; branchName: string };
+
 export interface BranchInfo {
   name: string;
   color: string;
@@ -26,6 +31,14 @@ export interface RemoteTracking {
   ahead: number;
   behind: number;
   isConfiguredUpstream: boolean;
+}
+
+export interface RemoteBranchInfo {
+  remote: string;
+  branchName: string;
+  ref: string;
+  color: string;
+  localBranchName?: string;
 }
 
 export interface RemoteConfig {
@@ -59,6 +72,23 @@ export interface RepositoryState {
   lastFetched?: string;
 }
 
+export type CommitFileStatus =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "copied"
+  | "typechange"
+  | "unmerged"
+  | "unknown";
+
+export interface CommitFileChange {
+  path: string;
+  oldPath?: string;
+  status: CommitFileStatus;
+  rawStatus: string;
+}
+
 export type CommitAction =
   | "checkout"
   | "cherry-pick"
@@ -79,9 +109,11 @@ export type WebviewMessage =
   | { type: "ready" }
   | { type: "webview-log"; level: "debug" | "info" | "warn" | "error"; message: string; details?: unknown }
   | { type: "request-initial-data" }
-  | { type: "request-commits"; dateRange: DateRange; page: number; searchText: string }
+  | { type: "request-commits"; dateRange: DateRange; page: number; searchText: string; scope: HistoryScope }
   | { type: "request-branches" }
   | { type: "request-remotes" }
+  | { type: "request-commit-details"; commitHash: string }
+  | { type: "open-commit-file-diff"; commitHash: string; file: CommitFileChange }
   | { type: "refresh" }
   | { type: "execute-action"; action: CommitAction; commitHash: string }
   | { type: "execute-branch-action"; action: BranchAction; branchName?: string; remote?: string };
@@ -89,9 +121,10 @@ export type WebviewMessage =
 export type ExtHostMessage =
   | { type: "repo-state"; repo: RepositoryState }
   | { type: "commits-data"; commits: CommitNode[]; pagination: PaginationState }
-  | { type: "branches-data"; branches: BranchInfo[] }
+  | { type: "branches-data"; branches: BranchInfo[]; remoteBranches: RemoteBranchInfo[] }
   | { type: "remotes-data"; remotes: RemoteConfig[] }
-  | { type: "loading"; loading: boolean; scope?: "all" | "commits" | "branches" | "remotes" | "action" }
+  | { type: "commit-details-data"; commitHash: string; baseHash?: string; files: CommitFileChange[] }
+  | { type: "loading"; loading: boolean; scope?: "all" | "commits" | "branches" | "remotes" | "commit-details" | "action" }
   | { type: "error"; message: string }
   | { type: "action-result"; success: boolean; message: string }
   | { type: "repo-changed" };
@@ -99,6 +132,10 @@ export type ExtHostMessage =
 export const DEFAULT_DATE_RANGE: DateRange = {
   mode: "preset",
   presetDays: 7
+};
+
+export const DEFAULT_HISTORY_SCOPE: HistoryScope = {
+  type: "all"
 };
 
 export const PAGE_SIZE = 8;

@@ -1,9 +1,9 @@
 import * as path from "node:path";
-import type { BranchInfo, DateRange, RemoteConfig, RepositoryState } from "../shared/types";
-import { PAGE_SIZE } from "../shared/types";
+import type { BranchInfo, CommitFileChange, DateRange, HistoryScope, RemoteBranchInfo, RemoteConfig, RepositoryState } from "../shared/types";
+import { DEFAULT_HISTORY_SCOPE, PAGE_SIZE } from "../shared/types";
 import { colors } from "../shared/tokens";
 import { getActiveRepository } from "./api";
-import { GIT_LOG_FORMAT, parseCommits, parseLocalBranchRows, parseRemoteRefs, parseRemotes } from "./parser";
+import { GIT_LOG_FORMAT, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes } from "./parser";
 import { runGit } from "./runner";
 
 export async function getCommits(
@@ -11,16 +11,18 @@ export async function getCommits(
   dateRange: DateRange,
   page: number,
   pageSize: number = PAGE_SIZE,
-  searchText = ""
+  searchText = "",
+  scope: HistoryScope = DEFAULT_HISTORY_SCOPE
 ) {
   const remotes = await getRemotes(cwd);
   const remoteNames = remotes.map((remote) => remote.name);
   const needsClientFilter = searchText.trim().length > 0;
   const allMode = dateRange.mode === "preset" && dateRange.presetDays === null;
   const shouldPaginate = needsClientFilter || allMode;
-  const args = ["log", "--all", "--date-order", `--format=${GIT_LOG_FORMAT}`];
+  const args = ["log", "--date-order", `--format=${GIT_LOG_FORMAT}`];
 
   addDateArgs(args, dateRange);
+  addScopeArgs(args, scope);
 
   if (!needsClientFilter && allMode) {
     args.push(`--skip=${page * pageSize}`, "-n", `${pageSize}`);
@@ -31,12 +33,12 @@ export async function getCommits(
     throw new Error(formatGitError("git log failed", result.stderr, result.timedOut));
   }
 
-  let commits = parseCommits(result.stdout, remoteNames);
+  let commits = parseCommits(result.stdout, remoteNames, getScopeDisplayName(scope));
   if (needsClientFilter) {
     commits = filterCommits(commits, searchText);
   }
 
-  const total = needsClientFilter ? commits.length : await getCommitTotal(cwd, dateRange);
+  const total = needsClientFilter ? commits.length : await getCommitTotal(cwd, dateRange, scope);
   const paginated = needsClientFilter ? commits.slice(page * pageSize, page * pageSize + pageSize) : commits;
 
   return {
@@ -111,6 +113,49 @@ export async function getBranches(cwd: string): Promise<BranchInfo[]> {
   );
 }
 
+export async function getRemoteBranches(cwd: string): Promise<RemoteBranchInfo[]> {
+  const [remoteRefResult, remotes, localBranchResult] = await Promise.all([
+    runGit(["for-each-ref", "--format=%(refname:short)", "refs/remotes/"], cwd),
+    getRemotes(cwd),
+    runGit(["for-each-ref", "--format=%(refname:short)", "refs/heads/"], cwd)
+  ]);
+
+  if (remoteRefResult.exitCode !== 0) {
+    return [];
+  }
+
+  const localBranches = new Set(parseLocalBranchRows(localBranchResult.exitCode === 0 ? localBranchResult.stdout : "").map((branch) => branch.name));
+  const remoteByName = new Map(remotes.map((remote) => [remote.name, remote]));
+
+  return parseRemoteRefs(remoteRefResult.stdout).flatMap((ref): RemoteBranchInfo[] => {
+    const remote = remotes.find((candidate) => ref.startsWith(`${candidate.name}/`));
+    if (!remote) {
+      const fallbackRemote = ref.split("/")[0];
+      const branchName = ref.slice(fallbackRemote.length + 1);
+      return [
+        {
+          remote: fallbackRemote,
+          branchName,
+          ref,
+          color: remoteByName.get(fallbackRemote)?.color ?? colors.remoteColorPool[0],
+          localBranchName: localBranches.has(branchName) ? branchName : undefined
+        }
+      ];
+    }
+
+    const branchName = ref.slice(remote.name.length + 1);
+    return [
+      {
+        remote: remote.name,
+        branchName,
+        ref,
+        color: remote.color,
+        localBranchName: localBranches.has(branchName) ? branchName : undefined
+      }
+    ];
+  });
+}
+
 export async function getRemotes(cwd: string): Promise<RemoteConfig[]> {
   const result = await runGit(["remote", "-v"], cwd);
   if (result.exitCode !== 0) {
@@ -171,14 +216,58 @@ export async function getRepositoryState(cwd?: string): Promise<RepositoryState>
   };
 }
 
-async function getCommitTotal(cwd: string, dateRange: DateRange): Promise<number> {
-  const args = ["rev-list", "--all", "--count"];
+export async function getCommitBaseHash(cwd: string, commitHash: string): Promise<string | undefined> {
+  const result = await runGit(["rev-list", "--parents", "-n", "1", commitHash], cwd);
+  if (result.exitCode !== 0) {
+    return undefined;
+  }
+
+  const [, firstParent] = result.stdout.trim().split(/\s+/);
+  return firstParent;
+}
+
+export async function getCommitFileChanges(cwd: string, commitHash: string): Promise<{ baseHash?: string; files: CommitFileChange[] }> {
+  const baseHash = await getCommitBaseHash(cwd, commitHash);
+  const args = baseHash
+    ? ["diff", "--name-status", "-M", baseHash, commitHash]
+    : ["diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", commitHash];
+  const result = await runGit(args, cwd);
+  if (result.exitCode !== 0) {
+    throw new Error(formatGitError("git changed-file discovery failed", result.stderr, result.timedOut));
+  }
+
+  return {
+    baseHash,
+    files: parseNameStatus(result.stdout)
+  };
+}
+
+async function getCommitTotal(cwd: string, dateRange: DateRange, scope: HistoryScope = DEFAULT_HISTORY_SCOPE): Promise<number> {
+  const args = ["rev-list", "--count"];
   addDateArgs(args, dateRange);
+  addScopeArgs(args, scope);
   const result = await runGit(args, cwd);
   if (result.exitCode !== 0) {
     return 0;
   }
   return Number.parseInt(result.stdout.trim(), 10) || 0;
+}
+
+function addScopeArgs(args: string[], scope: HistoryScope): void {
+  if (scope.type === "all") {
+    args.push("--all");
+    return;
+  }
+
+  args.push(scope.ref);
+}
+
+function getScopeDisplayName(scope: HistoryScope): string | undefined {
+  if (scope.type === "all") {
+    return undefined;
+  }
+
+  return scope.ref;
 }
 
 function addDateArgs(args: string[], dateRange: DateRange): void {

@@ -1,9 +1,32 @@
 import { colors } from "../../../shared/tokens";
-import type { CommitAction, CommitNode } from "../../../shared/types";
+import type { CommitAction, CommitFileChange, CommitNode } from "../../../shared/types";
 import { Icon, type IconName } from "../../icons";
 import { branchColor, formatFullDate } from "../../utils";
 
-export function CommitDetail({ commit, onAction }: { commit?: CommitNode; onAction: (action: CommitAction) => void }) {
+const statusLabels: Record<CommitFileChange["status"], string> = {
+  added: "A",
+  modified: "M",
+  deleted: "D",
+  renamed: "R",
+  copied: "C",
+  typechange: "T",
+  unmerged: "U",
+  unknown: "?"
+};
+
+export function CommitDetail({
+  commit,
+  files,
+  filesLoading,
+  onAction,
+  onOpenFile
+}: {
+  commit?: CommitNode;
+  files: CommitFileChange[];
+  filesLoading: boolean;
+  onAction: (action: CommitAction) => void;
+  onOpenFile: (file: CommitFileChange) => void;
+}) {
   if (!commit) {
     return (
       <aside className="detail-panel">
@@ -33,6 +56,28 @@ export function CommitDetail({ commit, onAction }: { commit?: CommitNode; onActi
         {commit.parents.length > 0 && <DetailRow label="Parents" value={commit.parents.join(", ")} mono />}
         {commit.isMerge && <DetailRow label="Type" value="Merge commit" color={colors.branch[2]} />}
         {commit.tags.length > 0 && <DetailRow label="Tags" value={commit.tags.join(", ")} color={colors.tagFg} />}
+      </div>
+      <div className="detail-section">
+        <div className="panel-heading standalone">Changed Files</div>
+        {filesLoading && <div className="empty-panel compact">Loading changed files...</div>}
+        {!filesLoading && files.length === 0 && <div className="empty-panel compact">No file changes.</div>}
+        {!filesLoading &&
+          files.map((file) => (
+            <button className="file-change-item" key={`${file.path}:${file.oldPath ?? ""}`} onClick={(event) => { event.currentTarget.blur(); onOpenFile(file); }} type="button">
+              <span className={`file-status file-status-${file.status}`}>{statusLabels[file.status]}</span>
+              <span className="file-change-path">
+                {file.oldPath && file.oldPath !== file.path ? (
+                  <>
+                    <span className="mono">{file.oldPath}</span>
+                    <span className="file-rename-arrow"> → </span>
+                    <span className="mono">{file.path}</span>
+                  </>
+                ) : (
+                  <span className="mono">{file.path}</span>
+                )}
+              </span>
+            </button>
+          ))}
       </div>
       <div className="detail-section">
         <div className="panel-heading standalone">Actions</div>

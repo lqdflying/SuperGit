@@ -1,0 +1,97 @@
+---
+description: SuperGit webview, CSP, extension panel wiring, and VS Code API bridge
+globs: src/webview/**,src/extension.ts,media/**
+alwaysApply: false
+---
+
+# SuperGit Webview
+
+## Panel setup order (critical)
+
+Register the message listener **before** assigning `panel.webview.html`:
+
+1. Create panel → 2. `panel.iconPath` → 3. `onDidDispose` → 4. `onDidReceiveMessage` → 5. `webview.html`
+
+The webview can post `ready` before the host listens if this order is wrong.
+
+## VS Code API
+
+- Call `acquireVsCodeApi()` once
+- If bootstrap inline script acquires it, store on `window.__SUPERGIT_VSCODE_API__` and reuse in the React bundle
+- Persist webview UI state via `getState()` / `setState()` (e.g. detail panel width)
+
+## Boot fallback
+
+Keep a fallback inside `#root` so a failed React mount shows `Loading Git graph...` instead of a blank panel.
+
+## CSP (strict)
+
+```html
+default-src 'none';
+img-src ${webview.cspSource} data:;
+style-src ${webview.cspSource} 'unsafe-inline';
+script-src 'nonce-${nonce}';
+```
+
+`localResourceRoots`: `dist/webview`, `media`, `assets`. Use `webview.asWebviewUri()` for `main.js`, `styles.css`, `logo.png`.
+
+## esbuild webview bundle
+
+```js
+{ format: "iife", platform: "browser", target: "es2022", jsx: "automatic" }
+```
+
+Without `jsx: "automatic"`, runtime fails with `ReferenceError: React is not defined`.
+
+Verify after build:
+
+```bash
+rg -n "React\\.createElement\\(" dist/webview/main.js   # should be empty
+rg -n "react/jsx-runtime" dist/webview/main.js          # should match
+```
+
+## Webview log stages (debug boundaries)
+
+`webview html loaded` → `webview bundle loaded` → `react app render scheduled` → `webview app mounted` → `ready` → `repository state loaded` → `commits loaded` → `branches loaded` → `remotes loaded`
+
+## Graph tab UX
+
+- Commit history is scoped via `historyScope` in `App.tsx`; reset pagination on scope change
+- `BranchSidebar`: All branches, local/remote filters, selected styling
+- Detail panel width is ratio-based (`detailShare`, default `0.36`, clamp `0.28`–`0.48`), persisted in webview state
+- Commit file diffs: `vscode.diff` with `preview: false`, `preserveFocus: true`, `ViewColumn.Beside`
+- `CommitTable`: render merge-parent continuation stubs when parent is off-page
+- Keep AUTHOR/DATE/HASH on one line (`white-space: nowrap`, fixed column widths)
+- `formatShortDate` → `MM/DD HH:mm` (24h) in `src/webview/utils.ts`
+
+## Branch tracking tab UX
+
+Implementation: `src/webview/components/tracking/TrackingView.tsx`
+
+### Selection
+
+- Click **local branch pill** or **remote row** to choose push/pull target
+- State: `selectedBranchName` + optional `selectedRemote`; default = checked-out branch
+- `.current` = checked out; `.selected` = chosen for Quick Actions (separate styles)
+- Clicking a remote row sets branch + remote so counts come from that tracking ref
+
+### Proposed actions from sync status
+
+| Status | Push | Pull |
+|--------|------|------|
+| synced | disabled | disabled |
+| ahead | primary (`Push N`) | disabled |
+| behind | disabled | primary (`Pull N`) |
+| diverged | primary | primary |
+| no-upstream | disabled | disabled; highlight Set Upstream |
+
+- Show `tracking-selection-status` card: `local → remote/ref` + recommendation
+- Use `.quick-button.primary` for recommended action(s)
+
+### Tracking layout CSS
+
+- Fixed widths: `.tracking-local` 228px, `.tracking-arrows` 170px, `.tracking-remotes` 272px
+- `.tracking-diagram` → `width: fit-content`
+- Pills/rows need explicit dark backgrounds; global `button { background: transparent }` makes them look white
+- Colored dots in `.branch-dot`; `current` / `upstream` tiny-pills stay inside pills
+- Root webview: `color-scheme: dark`

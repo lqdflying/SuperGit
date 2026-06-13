@@ -1,0 +1,62 @@
+---
+description: SuperGit project intent, architecture, design goals, and agent policy
+alwaysApply: true
+---
+
+# SuperGit Project
+
+VS Code extension for a Git commit graph and branch tracking webview.
+
+## Source of truth
+
+- Product behavior/UI: read all files in `Design/` before UI or behavior changes.
+- Spec: `Design/git-graph-extension-spec.md`
+- Visual reference: `Design/git-graph-extension-ui-v2.jsx`
+- Assets: `assets/icon.png` (package/panel icon), `assets/logo.png` (webview logo)
+
+## Design goals
+
+- Dark VS Code-native webview; dense, operational, tool-like UI (not a landing page)
+- Commit graph tab, branch tracking tab, multi-remote visibility, guarded Git actions
+- Stable dimensions for graph lanes, sidebars, toolbar, rows, status areas
+- Do not replace real UI with explanatory placeholder text
+- Branch tracking actions must be **contextual**: after selection, show ahead/behind/synced/diverged/no-upstream and enable/highlight only sensible push/pull/upstream actions
+
+## Architecture
+
+| Layer | Entry |
+|-------|-------|
+| Extension host | `src/extension.ts` |
+| Git API | `src/git/api.ts` |
+| Git CLI | `src/git/runner.ts` |
+| Parsing | `src/git/parser.ts` |
+| Read models | `src/git/commands.ts` |
+| Write actions | `src/git/actions.ts` |
+| Diff provider | `src/git/diffProvider.ts` |
+| Webview React | `src/webview/main.tsx`, `App.tsx`, `components/` |
+| Webview CSS | `media/styles.css` |
+| Shared types | `src/shared/types.ts`, `src/shared/tokens.ts` |
+
+## Commands & settings
+
+- `superGit.show`, `superGit.showLogs`, `superGit.toggleDebug`
+- `superGit.debug: true` enables debug logs in output channel + log file
+- Depends on `vscode.git`; `main` is `./dist/extension.js`
+
+## Git action pitfalls (branch tracking)
+
+- `git pull --ff-only origin <branch>` updates the **checked-out** branch, not `<branch>` when another branch is selected
+- Non-checked-out pull: `git fetch <remote> <branch>:<branch>` (fast-forward only; no `+`)
+- Checked-out pull: `git pull --ff-only <remote> <branch>`
+- After successful branch actions in `runBranchAction`, refresh in order: `loadBranches` → `loadRemotes` → `loadCommits` when history changed
+- Webview must pass explicit `branchName` and `remote` on `execute-branch-action` for Tracking tab selection
+
+## Agent policy
+
+- Read only this repo's guidance; do not import unrelated project memories
+- Do not infer log events not visible in summaries; add diagnostics instead
+- Search VS Code Server logs narrowly by session and extension name
+- Inspect screenshots/images directly; do not guess from filenames
+- Do not revert user changes; keep fixes scoped; avoid destructive git commands unless asked
+- Prefer `rg` / `rg --files` for search
+- **Build/package VSIX only — never install or reload the extension for the user** (see `supergit-build-verify` rule)

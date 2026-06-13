@@ -2,15 +2,19 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeBranchAction, executeCommitAction } from "./git/actions";
 import { getActiveRepository, onRepositoryChange } from "./git/api";
-import { getBranches, getCommits, getRemotes, getRepositoryState } from "./git/commands";
+import { getBranches, getCommitBaseHash, getCommitFileChanges, getCommits, getRemoteBranches, getRemotes, getRepositoryState } from "./git/commands";
+import { createSuperGitContentUri, SUPERGIT_DIFF_SCHEME, SuperGitDiffContentProvider } from "./git/diffProvider";
 import { debug, error as logError, info, initializeLogger, isDebugEnabled, showLogs, warn } from "./logger";
 import {
   DEFAULT_DATE_RANGE,
+  DEFAULT_HISTORY_SCOPE,
   PAGE_SIZE,
   type BranchAction,
+  type CommitFileChange,
   type CommitAction,
   type DateRange,
   type ExtHostMessage,
+  type HistoryScope,
   type WebviewMessage
 } from "./shared/types";
 
@@ -18,10 +22,11 @@ let panel: vscode.WebviewPanel | undefined;
 let repositoryWatcher: vscode.Disposable | undefined;
 let refreshTimer: NodeJS.Timeout | undefined;
 
-const lastCommitRequest: { dateRange: DateRange; page: number; searchText: string } = {
+const lastCommitRequest: { dateRange: DateRange; page: number; searchText: string; scope: HistoryScope } = {
   dateRange: DEFAULT_DATE_RANGE,
   page: 0,
-  searchText: ""
+  searchText: "",
+  scope: DEFAULT_HISTORY_SCOPE
 };
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -41,6 +46,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   info("status bar item shown", { command: statusBarItem.command });
 
   context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider(SUPERGIT_DIFF_SCHEME, new SuperGitDiffContentProvider()),
     statusBarItem,
     vscode.commands.registerCommand("superGit.show", async () => {
       info("command invoked", { command: "superGit.show", source: "status-bar-or-command-palette" });
@@ -163,13 +169,20 @@ async function handleWebviewMessage(message: WebviewMessage): Promise<void> {
       lastCommitRequest.dateRange = message.dateRange;
       lastCommitRequest.page = message.page;
       lastCommitRequest.searchText = message.searchText;
-      await loadCommits(message.dateRange, message.page, message.searchText);
+      lastCommitRequest.scope = message.scope;
+      await loadCommits(message.dateRange, message.page, message.searchText, message.scope);
       return;
     case "request-branches":
       await loadBranches();
       return;
     case "request-remotes":
       await loadRemotes();
+      return;
+    case "request-commit-details":
+      await loadCommitDetails(message.commitHash);
+      return;
+    case "open-commit-file-diff":
+      await openCommitFileDiff(message.commitHash, message.file);
       return;
     case "refresh":
       await loadInitialData();
@@ -205,13 +218,13 @@ async function loadInitialData(): Promise<void> {
       warn("no git repository root available");
       post({ type: "error", message: "Open a folder with a Git repository to use SuperGit." });
       post({ type: "commits-data", commits: [], pagination: emptyPagination() });
-      post({ type: "branches-data", branches: [] });
+      post({ type: "branches-data", branches: [], remoteBranches: [] });
       post({ type: "remotes-data", remotes: [] });
       return;
     }
 
     await Promise.all([
-      loadCommits(lastCommitRequest.dateRange, lastCommitRequest.page, lastCommitRequest.searchText, root),
+      loadCommits(lastCommitRequest.dateRange, lastCommitRequest.page, lastCommitRequest.searchText, lastCommitRequest.scope, root),
       loadBranches(root),
       loadRemotes(root)
     ]);
@@ -222,8 +235,8 @@ async function loadInitialData(): Promise<void> {
   }
 }
 
-async function loadCommits(dateRange: DateRange, page: number, searchText: string, knownRoot?: string): Promise<void> {
-  debug("loadCommits start", { dateRange, page, searchTextLength: searchText.length, knownRoot });
+async function loadCommits(dateRange: DateRange, page: number, searchText: string, scope: HistoryScope, knownRoot?: string): Promise<void> {
+  debug("loadCommits start", { dateRange, page, searchTextLength: searchText.length, scope, knownRoot });
   post({ type: "loading", loading: true, scope: "commits" });
   try {
     const root = knownRoot ?? (await resolveRepositoryRoot());
@@ -232,13 +245,14 @@ async function loadCommits(dateRange: DateRange, page: number, searchText: strin
       return;
     }
 
-    const result = await getCommits(root, dateRange, page, PAGE_SIZE, searchText);
+    const result = await getCommits(root, dateRange, page, PAGE_SIZE, searchText, scope);
     post({ type: "commits-data", commits: result.commits, pagination: result.pagination });
     info("commits loaded", {
       count: result.commits.length,
       total: result.pagination.totalItems,
       page: result.pagination.page,
-      totalPages: result.pagination.totalPages
+      totalPages: result.pagination.totalPages,
+      scope
     });
   } catch (error) {
     postError(error);
@@ -252,13 +266,33 @@ async function loadBranches(knownRoot?: string): Promise<void> {
   post({ type: "loading", loading: true, scope: "branches" });
   try {
     const root = knownRoot ?? (await resolveRepositoryRoot());
-    const branches = root ? await getBranches(root) : [];
-    post({ type: "branches-data", branches });
-    info("branches loaded", { count: branches.length });
+    const [branches, remoteBranches] = root ? await Promise.all([getBranches(root), getRemoteBranches(root)]) : [[], []];
+    post({ type: "branches-data", branches, remoteBranches });
+    info("branches loaded", { count: branches.length, remoteBranchCount: remoteBranches.length });
   } catch (error) {
     postError(error);
   } finally {
     post({ type: "loading", loading: false, scope: "branches" });
+  }
+}
+
+async function loadCommitDetails(commitHash: string, knownRoot?: string): Promise<void> {
+  debug("loadCommitDetails start", { commitHash: commitHash.slice(0, 12), knownRoot });
+  post({ type: "loading", loading: true, scope: "commit-details" });
+  try {
+    const root = knownRoot ?? (await resolveRepositoryRoot());
+    if (!root) {
+      post({ type: "commit-details-data", commitHash, files: [] });
+      return;
+    }
+
+    const result = await getCommitFileChanges(root, commitHash);
+    post({ type: "commit-details-data", commitHash, baseHash: result.baseHash, files: result.files });
+    info("commit details loaded", { commitHash: commitHash.slice(0, 12), fileCount: result.files.length });
+  } catch (error) {
+    postError(error);
+  } finally {
+    post({ type: "loading", loading: false, scope: "commit-details" });
   }
 }
 
@@ -314,12 +348,51 @@ async function runBranchAction(action: BranchAction, branchName?: string, remote
     post({ type: "action-result", ...result });
     showActionNotification(result);
     if (result.success) {
-      await loadInitialData();
+      const repo = await getRepositoryState(root);
+      repo.lastFetched = new Date().toISOString();
+      post({ type: "repo-state", repo });
+      await loadBranches(root);
+      await loadRemotes(root);
+      if (action === "pull" || action === "push" || action === "delete" || action === "set-upstream") {
+        await loadCommits(lastCommitRequest.dateRange, lastCommitRequest.page, lastCommitRequest.searchText, lastCommitRequest.scope, root);
+      }
     }
   } catch (error) {
     postError(error);
   } finally {
     post({ type: "loading", loading: false, scope: "action" });
+  }
+}
+
+async function openCommitFileDiff(commitHash: string, file: CommitFileChange): Promise<void> {
+  info("commit file diff requested", {
+    commitHash: commitHash.slice(0, 12),
+    path: file.path,
+    oldPath: file.oldPath,
+    status: file.status
+  });
+  const root = await resolveRepositoryRoot();
+  if (!root) {
+    post({ type: "action-result", success: false, message: "No Git repository is open." });
+    return;
+  }
+
+  try {
+    const baseHash = await getCommitBaseHash(root, commitHash);
+    const shortHash = commitHash.slice(0, 7);
+    const left = file.status === "added" || !baseHash
+      ? createSuperGitContentUri({ root, filePath: file.oldPath ?? file.path, empty: true, label: `${file.path} (empty)` })
+      : createSuperGitContentUri({ root, ref: baseHash, filePath: file.oldPath ?? file.path, label: `${file.oldPath ?? file.path} (${baseHash.slice(0, 7)})` });
+    const right = file.status === "deleted"
+      ? createSuperGitContentUri({ root, filePath: file.path, empty: true, label: `${file.path} (deleted)` })
+      : createSuperGitContentUri({ root, ref: commitHash, filePath: file.path, label: `${file.path} (${shortHash})` });
+    await vscode.commands.executeCommand("vscode.diff", left, right, `${file.path} (${shortHash})`, {
+      preview: false,
+      preserveFocus: true,
+      viewColumn: vscode.ViewColumn.Beside
+    });
+  } catch (error) {
+    postError(error);
   }
 }
 
@@ -451,8 +524,15 @@ function summarizeWebviewMessage(message: WebviewMessage) {
       type: message.type,
       dateRange: message.dateRange,
       page: message.page,
-      searchTextLength: message.searchText.length
+      searchTextLength: message.searchText.length,
+      scope: message.scope
     };
+  }
+  if (message.type === "request-commit-details") {
+    return { type: message.type, commitHash: message.commitHash.slice(0, 12) };
+  }
+  if (message.type === "open-commit-file-diff") {
+    return { type: message.type, commitHash: message.commitHash.slice(0, 12), path: message.file.path };
   }
   if (message.type === "execute-action") {
     return {
@@ -476,7 +556,9 @@ function summarizeExtHostMessage(message: ExtHostMessage) {
     case "commits-data":
       return { type: message.type, count: message.commits.length, pagination: message.pagination };
     case "branches-data":
-      return { type: message.type, count: message.branches.length };
+      return { type: message.type, count: message.branches.length, remoteBranchCount: message.remoteBranches.length };
+    case "commit-details-data":
+      return { type: message.type, commitHash: message.commitHash.slice(0, 12), fileCount: message.files.length };
     case "remotes-data":
       return { type: message.type, count: message.remotes.length };
     case "repo-state":

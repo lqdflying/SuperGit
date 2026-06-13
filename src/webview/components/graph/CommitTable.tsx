@@ -4,6 +4,22 @@ import type { CommitNode } from "../../../shared/types";
 import { Icon } from "../../icons";
 import { branchColor, formatShortDate } from "../../utils";
 
+type GraphEdge = {
+  kind: "edge";
+  fromLane: number;
+  fromRow: number;
+  toLane: number;
+  toRow: number;
+  color: string;
+};
+
+type GraphStub = {
+  kind: "stub";
+  lane: number;
+  fromRow: number;
+  color: string;
+};
+
 export function CommitTable({ commits, selectedHash, onSelect }: { commits: CommitNode[]; selectedHash: string; onSelect: (hash: string) => void }) {
   return (
     <>
@@ -38,16 +54,33 @@ function GraphCanvas({ commits, selectedHash, onSelect }: { commits: CommitNode[
   const rowY = (index: number) => index * graph.rowHeight + graph.rowHeight / 2 + 10;
   const indexMap = useMemo(() => new Map(commits.map((commit, index) => [commit.hash, index])), [commits]);
 
-  const edges = useMemo(() => {
-    return commits.flatMap((commit, index) =>
-      commit.parents.flatMap((parent) => {
-        const parentIndex = indexMap.get(parent);
-        if (parentIndex === undefined) {
-          return [];
+  const shapes = useMemo(() => {
+    const items: Array<GraphEdge | GraphStub> = [];
+    commits.forEach((commit, index) => {
+      commit.parents.forEach((parent, parentIndex) => {
+        const parentRow = indexMap.get(parent);
+        const color = branchColor((commit.branchIndex + parentIndex) % graph.visibleLanes);
+        if (parentRow !== undefined) {
+          items.push({
+            kind: "edge",
+            fromLane: commit.branchIndex,
+            fromRow: index,
+            toLane: commits[parentRow].branchIndex,
+            toRow: parentRow,
+            color
+          });
+          return;
         }
-        return [{ fromLane: commit.branchIndex, fromRow: index, toLane: commits[parentIndex].branchIndex, toRow: parentIndex, color: branchColor(commit.branchIndex) }];
-      })
-    );
+
+        items.push({
+          kind: "stub",
+          lane: (commit.branchIndex + parentIndex) % graph.visibleLanes,
+          fromRow: index,
+          color
+        });
+      });
+    });
+    return items;
   }, [commits, indexMap]);
 
   return (
@@ -55,16 +88,35 @@ function GraphCanvas({ commits, selectedHash, onSelect }: { commits: CommitNode[
       {Array.from({ length: graph.visibleLanes }).map((_, index) => (
         <line key={index} x1={laneX(index)} y1={0} x2={laneX(index)} y2={height} stroke={branchColor(index)} strokeWidth={1} opacity={0.08} />
       ))}
-      {edges.map((edge, index) => {
-        const x1 = laneX(edge.fromLane);
-        const y1 = rowY(edge.fromRow);
-        const x2 = laneX(edge.toLane);
-        const y2 = rowY(edge.toRow);
-        if (edge.fromLane === edge.toLane) {
-          return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke={edge.color} strokeWidth={1.8} opacity={0.55} />;
+      {shapes.map((shape, index) => {
+        if (shape.kind === "stub") {
+          const x = laneX(shape.lane);
+          const y1 = rowY(shape.fromRow);
+          const y2 = Math.min(height - 4, y1 + graph.rowHeight * 0.55);
+          return (
+            <line
+              key={`stub-${index}`}
+              x1={x}
+              y1={y1}
+              x2={x}
+              y2={y2}
+              stroke={shape.color}
+              strokeWidth={1.8}
+              strokeDasharray="3,3"
+              opacity={0.4}
+            />
+          );
+        }
+
+        const x1 = laneX(shape.fromLane);
+        const y1 = rowY(shape.fromRow);
+        const x2 = laneX(shape.toLane);
+        const y2 = rowY(shape.toRow);
+        if (shape.fromLane === shape.toLane) {
+          return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke={shape.color} strokeWidth={1.8} opacity={0.55} />;
         }
         const midY = y1 + (y2 - y1) * 0.4;
-        return <path key={index} d={`M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`} stroke={edge.color} strokeWidth={1.8} fill="none" opacity={0.45} />;
+        return <path key={index} d={`M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`} stroke={shape.color} strokeWidth={1.8} fill="none" opacity={0.45} />;
       })}
       {commits.map((commit, index) => {
         const cx = laneX(commit.branchIndex);

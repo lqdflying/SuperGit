@@ -8,6 +8,8 @@ const runGitMock = vi.hoisted(() => vi.fn());
 const getCurrentBranchMock = vi.hoisted(() => vi.fn());
 const getRemotesMock = vi.hoisted(() => vi.fn());
 
+const showQuickPickMock = vi.hoisted(() => vi.fn());
+
 vi.mock("vscode", () => ({
   env: {
     clipboard: {
@@ -16,7 +18,8 @@ vi.mock("vscode", () => ({
   },
   window: {
     showWarningMessage: showWarningMessageMock,
-    showInputBox: showInputBoxMock
+    showInputBox: showInputBoxMock,
+    showQuickPick: showQuickPickMock
   }
 }));
 
@@ -141,6 +144,58 @@ describe("executeBranchAction", () => {
     await executeBranchAction("/repo", "prune-stale", undefined, "origin");
     expect(runGitMock).toHaveBeenCalledWith(["branch", "-d", "feature/a"], "/repo", { timeout: 120_000 });
     expect(runGitMock).toHaveBeenCalledWith(["remote", "prune", "origin"], "/repo", { timeout: 120_000 });
+  });
+
+  it("prompts for remote when multiple remotes exist", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", color: "#fff" },
+      { name: "upstream", url: "upstream-url", color: "#000" }
+    ]);
+    showQuickPickMock.mockResolvedValue({ label: "upstream", description: "upstream-url", remote: { name: "upstream", url: "upstream-url", color: "#000" } });
+
+    await executeBranchAction("/repo", "push", "main");
+    expect(showQuickPickMock).toHaveBeenCalled();
+    expect(runGitMock).toHaveBeenCalledWith(["push", "upstream", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("offers all remotes for fetch when multiple remotes exist", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", color: "#fff" },
+      { name: "upstream", url: "upstream-url", color: "#000" }
+    ]);
+    showQuickPickMock.mockResolvedValue({ label: "All remotes", description: "Run against every configured remote" });
+
+    await executeBranchAction("/repo", "fetch");
+    expect(showQuickPickMock).toHaveBeenCalled();
+    expect(runGitMock).toHaveBeenCalledWith(["fetch", "--all", "--prune"], "/repo", { timeout: 120_000 });
+  });
+
+  it("skips remote quick pick when remote is explicit", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", color: "#fff" },
+      { name: "upstream", url: "upstream-url", color: "#000" }
+    ]);
+
+    await executeBranchAction("/repo", "pull", "main", "origin");
+    expect(showQuickPickMock).not.toHaveBeenCalled();
+    expect(runGitMock).toHaveBeenCalledWith(["pull", "--ff-only", "origin", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("pulls non-checked-out branches via fast-forward fetch refspec", async () => {
+    getCurrentBranchMock.mockResolvedValue("other");
+    await executeBranchAction("/repo", "pull", "feature/a", "origin");
+    expect(runGitMock).toHaveBeenCalledWith(["fetch", "origin", "feature/a:feature/a"], "/repo", { timeout: 120_000 });
+  });
+
+  it("cancels push when remote quick pick is dismissed", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", color: "#fff" },
+      { name: "upstream", url: "upstream-url", color: "#000" }
+    ]);
+    showQuickPickMock.mockResolvedValue(undefined);
+
+    await expect(executeBranchAction("/repo", "push", "main")).resolves.toEqual({ success: false, message: "Push cancelled." });
+    expect(runGitMock).not.toHaveBeenCalled();
   });
 });
 

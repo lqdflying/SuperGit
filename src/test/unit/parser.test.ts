@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIELD_SEP, RECORD_SEP, parseCommits, parseLocalBranchRows, parseRemoteRefs, parseRemotes } from "../../git/parser";
+import { FIELD_SEP, RECORD_SEP, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes } from "../../git/parser";
 
 const commitRecord = (parts: string[]) => `${parts.join(FIELD_SEP)}${RECORD_SEP}`;
 
@@ -80,6 +80,30 @@ describe("parseCommits", () => {
 
     const commits = parseCommits(raw);
     expect(commits[6].branchIndex).toBe(0);
+  });
+
+  it("assigns merge parents to distinct lanes when visible", () => {
+    const raw = [
+      commitRecord(["merge", "merge", "Merge feature", "dev", "d@e", "2026-06-13T00:00:00Z", "mainParent featureParent", "main"]),
+      commitRecord(["mainParent", "mainP", "main commit", "dev", "d@e", "2026-06-12T00:00:00Z", "", "main"]),
+      commitRecord(["featureParent", "featP", "feature commit", "dev", "d@e", "2026-06-11T00:00:00Z", "", "feature/x"])
+    ].join("");
+
+    const commits = parseCommits(raw);
+    expect(commits[0].isMerge).toBe(true);
+    expect(commits[0].branchIndex).toBe(commits[1].branchIndex);
+    expect(commits[2].branchIndex).not.toBe(commits[0].branchIndex);
+  });
+});
+
+describe("parseNameStatus", () => {
+  it("parses modified, added, deleted, and renamed files", () => {
+    expect(parseNameStatus("M\tsrc/app.ts\nA\tsrc/new.ts\nD\tsrc/old.ts\nR100\tsrc/old-name.ts\tsrc/new-name.ts\n")).toEqual([
+      { path: "src/app.ts", status: "modified", rawStatus: "M" },
+      { path: "src/new.ts", status: "added", rawStatus: "A" },
+      { path: "src/old.ts", status: "deleted", rawStatus: "D" },
+      { oldPath: "src/old-name.ts", path: "src/new-name.ts", status: "renamed", rawStatus: "R100" }
+    ]);
   });
 });
 

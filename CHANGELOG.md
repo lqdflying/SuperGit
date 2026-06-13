@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.0.0 - 2026-06-13
+
+### Added
+
+- Scoped commit history filtering (all branches, local branch, remote branch) from the graph sidebar.
+- Remote-only branch listing grouped by remote in the branch sidebar.
+- Lazy-loaded changed-files list in commit detail with click-to-open file diffs via `vscode.diff`.
+- SuperGit diff content provider for in-editor commit file comparisons.
+- Resizable commit detail panel with persisted width ratio (`detailShare`).
+- Merge-parent continuation stubs in the commit graph when an off-page parent would break lane continuity.
+- Branch tracking selection: click a local branch or remote row to choose the push/pull target.
+- Contextual tracking recommendations (ahead → push, behind → pull, synced, diverged, no upstream) with primary action highlighting.
+- Multi-remote QuickPick for fetch, push, and pull when multiple remotes are configured.
+- Fast-forward pull for non-checked-out branches via `git fetch <remote> <branch>:<branch>`.
+- Cursor agent rules under `.cursor/rules/` and expanded `AGENTS.md` operational guidance.
+
+### Changed
+
+- Branch tracking Quick Actions now target the selected branch/remote instead of only the checked-out branch.
+- Branch tracking layout uses fixed column widths and truncates long branch names cleanly.
+- Push/pull/set-upstream refresh branch tracking data immediately after successful actions.
+- Commit detail diffs open beside the panel with `preserveFocus` so SuperGit stays focused.
+- Commit table date format is `MM/DD HH:mm` (24-hour, single line).
+- Webview buttons and branch pills use explicit dark-theme styling (`color-scheme: dark`).
+- Unit test count increased to 67 with coverage for scoped history, remote branches, merge lanes, name-status parsing, and multi-remote actions.
+
+### Fixed
+
+- Pull on a selected non-checked-out branch no longer merges into the wrong branch while reporting success.
+- Branch tracking ahead/behind badges now update after pull/push completes.
+- White/unstyled branch and file buttons in the webview dark theme.
+- `current` and `upstream` pills staying inside truncated branch rows.
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (67 tests)
+- `npm run build`
+- `npm run package`
+
+### Known Limitations
+
+- VS Code/Electron integration tests require a desktop-capable environment. Headless containers may fail `npm run test:integration` before extension load.
+
 ## 0.1.0 - 2026-06-13
 
 ### Added

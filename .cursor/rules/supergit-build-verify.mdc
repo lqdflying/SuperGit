@@ -1,0 +1,49 @@
+---
+description: SuperGit build, test, package — agents build only; user installs VSIX manually
+globs: esbuild.mjs,package.json,src/**,vitest.config.*
+alwaysApply: false
+---
+
+# SuperGit Build & Verify
+
+## Before claiming work complete
+
+```bash
+npm run typecheck
+npm run test:coverage
+npm run build
+npm run package
+```
+
+`npm run test:integration` may fail in headless containers (Electron/sandbox). Report that clearly; it is not necessarily a product bug.
+
+Current expected unit status: **67 tests** passing; coverage target met for `src/git/*.ts`.
+
+## VSIX output
+
+`/home/opc/SuperGit/supergit-1.0.0.vsix`
+
+Expected contents include: `extension/package.json`, `dist/extension.js`, `dist/webview/main.js`, `media/styles.css`, `assets/icon.png`, `assets/logo.png`.
+
+Package uses: `vsce package --no-dependencies --allow-missing-repository` (bundled into `dist/`).
+
+## Install policy for agents (strict)
+
+**Build and package only. Do not install.**
+
+- **Never** run `code --install-extension`, `cursor --install-extension`, or any CLI/UI install step
+- **Never** write, overwrite, or delete under `~/.vscode-server/extensions` or `~/.cursor-server/extensions`
+- **Never** run **Developer: Reload Window** or otherwise reload VS Code on the user's behalf
+- After `npm run package`, give the user the VSIX path and stop — they install manually
+
+Tell the user:
+
+1. Extensions → `...` → **Install from VSIX...**
+2. Select `/home/opc/SuperGit/supergit-1.0.0.vsix`
+3. **Developer: Reload Window**
+
+If fixes do not appear after a same-version rebuild, remind them: uninstall → reload → install VSIX → reload (user performs these steps).
+
+## Version bumps
+
+Keep current package version for normal test VSIX builds unless the user explicitly requests GA/release/version bump.
