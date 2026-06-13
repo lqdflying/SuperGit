@@ -1,0 +1,877 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #1e1e1e;
+  color: #cccccc;
+  font-family: "Segoe UI", -apple-system, system-ui, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.boot-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  color: #cccccc;
+  background: #1e1e1e;
+  text-align: center;
+}
+
+.boot-fallback strong {
+  color: #e0e0e0;
+  font-size: 13px;
+}
+
+.boot-fallback span {
+  color: #858585;
+  font-size: 12px;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+.app-shell {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  overflow: hidden;
+  user-select: none;
+}
+
+.title-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+
+.title-logo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.title-name {
+  font-weight: 700;
+  font-size: 12px;
+  color: #e0e0e0;
+  letter-spacing: 0;
+}
+
+.title-repo {
+  font-size: 11px;
+  color: #858585;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.divider {
+  width: 1px;
+  height: 16px;
+  background: #3c3c3c;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.toolbar-button,
+.tab-button,
+.range-button,
+.page-button,
+.action-item,
+.quick-button,
+.commit-row,
+.collapse-button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #858585;
+  white-space: nowrap;
+}
+
+.toolbar-button:hover,
+.toolbar-button.active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.toolbar-button.active {
+  color: #0078d4;
+  background: rgba(0, 120, 212, 0.15);
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+
+.search-bar input,
+.date-input {
+  background: #2d2d2d;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  color: #cccccc;
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+  outline: none;
+}
+
+.search-bar input {
+  flex: 1;
+  min-width: 80px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.search-bar span,
+.muted {
+  font-size: 11px;
+  color: #858585;
+}
+
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid #3c3c3c;
+  background: #252526;
+  flex-shrink: 0;
+}
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-bottom: 2px solid transparent;
+  color: #858585;
+  font-size: 12px;
+}
+
+.tab-button.active {
+  color: #e0e0e0;
+  border-bottom-color: #0078d4;
+  font-weight: 700;
+}
+
+.main-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.branch-sidebar {
+  width: 210px;
+  border-right: 1px solid #3c3c3c;
+  background: #252526;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.branch-sidebar.collapsed {
+  width: 24px;
+  align-items: center;
+  padding-top: 10px;
+  cursor: pointer;
+  color: #858585;
+  font-size: 16px;
+}
+
+.panel-heading {
+  padding: 8px 10px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #858585;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-heading.standalone {
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.collapse-button {
+  color: #858585;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 3px;
+}
+
+.branch-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.branch-list-item {
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-left: 2px solid transparent;
+}
+
+.branch-list-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.branch-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #e0e0e0;
+}
+
+.branch-meta {
+  font-size: 10px;
+  color: #858585;
+  white-space: nowrap;
+}
+
+.graph-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.date-range-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.range-button {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: #333333;
+  color: #858585;
+  border: 1px solid #3c3c3c;
+}
+
+.range-button.active {
+  background: #0078d4;
+  color: #fff;
+  border-color: #0078d4;
+}
+
+.date-input {
+  padding: 2px 6px;
+  font-size: 11px;
+  color-scheme: dark;
+}
+
+.column-header {
+  display: flex;
+  padding: 6px 0;
+  border-bottom: 1px solid #3c3c3c;
+  background: #2d2d2d;
+  font-size: 10px;
+  color: #858585;
+  font-weight: 700;
+  letter-spacing: 0;
+  flex-shrink: 0;
+}
+
+.graph-column {
+  width: 178px;
+  flex-shrink: 0;
+  padding-left: 8px;
+}
+
+.message-column,
+.commit-message {
+  flex: 1;
+  min-width: 0;
+}
+
+.author-column {
+  width: 70px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.date-column {
+  width: 100px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.hash-column {
+  width: 68px;
+  text-align: center;
+  padding-right: 8px;
+  flex-shrink: 0;
+}
+
+.commit-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.commit-grid {
+  display: flex;
+  min-width: 520px;
+}
+
+.graph-canvas-wrap {
+  padding-left: 0;
+}
+
+.graph-svg {
+  display: block;
+}
+
+.graph-node {
+  cursor: pointer;
+}
+
+.commit-rows {
+  flex: 1;
+  min-width: 0;
+}
+
+.commit-row {
+  width: 100%;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  color: #cccccc;
+  border-bottom: 1px solid rgba(60, 60, 60, 0.08);
+  text-align: left;
+  padding: 0;
+}
+
+.commit-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.commit-row.selected {
+  background: rgba(0, 120, 212, 0.15);
+}
+
+.commit-message {
+  padding-left: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.ref-pill,
+.tag-pill,
+.head-pill,
+.tiny-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+  line-height: 1.35;
+}
+
+.ref-pill {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid;
+}
+
+.tag-pill {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #b5890033;
+  color: #e2c08d;
+}
+
+.head-pill,
+.tiny-pill {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(0, 120, 212, 0.2);
+  color: #0078d4;
+  font-weight: 700;
+}
+
+.tiny-pill {
+  font-size: 9px;
+  font-family: inherit;
+}
+
+.message-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.commit-row .author-column,
+.commit-row .date-column {
+  font-size: 11px;
+  color: #858585;
+}
+
+.commit-row .hash-column {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.mono {
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+}
+
+.empty-rows,
+.empty-panel {
+  padding: 32px;
+  text-align: center;
+  color: #858585;
+  font-size: 12px;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid #3c3c3c;
+  background: #2d2d2d;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #858585;
+}
+
+.page-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 4px;
+  border-radius: 3px;
+  color: #858585;
+}
+
+.page-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.page-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.detail-panel {
+  width: 250px;
+  border-left: 1px solid #3c3c3c;
+  background: #252526;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.detail-section {
+  padding: 10px 12px;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.detail-title {
+  font-size: 13px;
+  color: #e0e0e0;
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+
+.detail-row {
+  display: flex;
+  margin-bottom: 6px;
+  font-size: 12px;
+  gap: 8px;
+}
+
+.detail-row span {
+  width: 60px;
+  color: #858585;
+  flex-shrink: 0;
+}
+
+.detail-row strong {
+  flex: 1;
+  min-width: 0;
+  color: #cccccc;
+  font-weight: 400;
+  word-break: break-all;
+}
+
+.action-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  margin-bottom: 2px;
+  border-radius: 3px;
+  color: #cccccc;
+  font-size: 12px;
+  text-align: left;
+}
+
+.action-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #e0e0e0;
+}
+
+.tracking-view {
+  flex: 1;
+  overflow: auto;
+  min-width: 0;
+}
+
+.tracking-header {
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.tracking-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e0e0e0;
+  margin-bottom: 4px;
+}
+
+.tracking-subtitle {
+  font-size: 11px;
+  color: #858585;
+}
+
+.remote-legend-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 20px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3c3c3c;
+  overflow-x: auto;
+}
+
+.legend-label,
+.tracking-column-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #858585;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.remote-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.remote-chip span,
+.remote-row > span,
+.local-branch-pill span,
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.remote-chip span {
+  width: 10px;
+  height: 10px;
+}
+
+.remote-chip strong {
+  font-size: 11px;
+  color: #e0e0e0;
+}
+
+.remote-chip em {
+  font-style: normal;
+  font-size: 10px;
+  color: #858585;
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+}
+
+.tracking-diagram-wrap {
+  padding: 20px 20px 0;
+  overflow-x: auto;
+}
+
+.tracking-diagram {
+  display: flex;
+  min-width: 760px;
+}
+
+.tracking-local {
+  width: 200px;
+  flex-shrink: 0;
+}
+
+.tracking-arrows {
+  width: 170px;
+  flex-shrink: 0;
+}
+
+.tracking-remotes {
+  flex: 1;
+  min-width: 0;
+}
+
+.tracking-column-title {
+  margin-bottom: 16px;
+  padding-left: 4px;
+  height: 14px;
+}
+
+.tracking-column-title.centered {
+  text-align: center;
+}
+
+.tracking-column-title.with-icon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tracking-branch-block {
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
+}
+
+.local-branch-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 188px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid;
+}
+
+.local-branch-pill strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #e0e0e0;
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+}
+
+.tracking-svg {
+  display: block;
+}
+
+.tracking-remote-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.remote-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #3c3c3c;
+  background: #2d2d2d;
+}
+
+.remote-row strong {
+  font-size: 10px;
+  color: #858585;
+}
+
+.remote-row em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+  font-size: 11px;
+  color: #cccccc;
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+}
+
+.untracked-mark {
+  color: #858585;
+  font-style: italic;
+  padding-left: 10px;
+}
+
+.status-pill,
+.status-pill span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+}
+
+.tracking-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #3c3c3c;
+  margin-top: 16px;
+}
+
+.legend-row,
+.quick-actions {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #858585;
+}
+
+.quick-actions {
+  gap: 8px;
+}
+
+.quick-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 4px;
+  border: 1px solid #3c3c3c;
+  background: #2d2d2d;
+  color: #cccccc;
+  font-size: 12px;
+}
+
+.quick-button:hover {
+  background: #333333;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 10px;
+  background: #0078d4;
+  color: #fff;
+  font-size: 11px;
+  flex-shrink: 0;
+  min-height: 22px;
+}
+
+.status-bar span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.status-separator {
+  opacity: 0.6;
+}
+
+.status-notice {
+  max-width: 45vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+@media (max-width: 760px) {
+  .branch-sidebar,
+  .detail-panel {
+    display: none;
+  }
+
+  .graph-column {
+    width: 150px;
+  }
+
+  .author-column {
+    width: 58px;
+  }
+
+  .date-column {
+    width: 84px;
+  }
+
+  .toolbar-button {
+    padding-inline: 5px;
+  }
+
+  .toolbar-button:nth-of-type(2),
+  .toolbar-button:nth-of-type(4),
+  .toolbar-button:nth-of-type(5) {
+    display: none;
+  }
+}

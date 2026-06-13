@@ -1,0 +1,6 @@
+origin	git@github.com:pil-cloudops/infra-core.git (fetch)
+origin	git@github.com:pil-cloudops/infra-core.git (push)
+upstream	git@github.com:pil-platform/infra-core.git (fetch)
+upstream	git@github.com:pil-platform/infra-core.git (push)
+backup	git@gitlab.internal:ops/infra-core.git (fetch)
+backup	git@gitlab.internal:ops/infra-core.git (push)
