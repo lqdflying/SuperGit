@@ -497,13 +497,14 @@ unzip -l supergit-*.vsix
 
 (or `unzip -l "supergit-$(node -p "require('./package.json').version").vsix"`)
 
-Expected included files:
+Expected included files (verify with `unzip -l supergit-*.vsix`):
 
 - `extension/package.json`
-- `extension/readme.md`
-- `extension/changelog.md`
-- `extension/assets/icon.png`
-- `extension/assets/logo.png`
+- `extension/readme.md` (from `README.md`)
+- `extension/changelog.md` (from `CHANGELOG.md` — update on every version bump)
+- `extension/LICENSE.txt`
+- `extension/assets/icon.png` (from `package.json` `"icon"`)
+- `extension/assets/logo.png` (webview logo)
 - `extension/dist/extension.js`
 - `extension/dist/webview/main.js`
 - `extension/media/styles.css`

@@ -96,16 +96,18 @@ Use the system npm if your local `npm` is a shim:
 The packaged extension is written to:
 
 ```text
-supergit-0.1.0.vsix
+supergit-<version>.vsix
 ```
+
+where `<version>` is the `"version"` field in `package.json`.
 
 ## Verification Status
 
 Current local verification:
 
 - TypeScript typecheck passes.
-- Unit tests pass: 53 tests.
-- Coverage passes the design target for `src/git/*.ts`: 97.16% lines/statements and 87.68% branches.
-- VSIX packaging passes and includes `assets/icon.png`, `assets/logo.png`, bundled extension/webview JavaScript, and CSS.
+- Unit tests pass: 67 tests.
+- Coverage passes the design target for `src/git/*.ts`.
+- VSIX packaging passes and includes `CHANGELOG.md`, `README.md`, `LICENSE`, `assets/icon.png`, `assets/logo.png`, bundled extension/webview JavaScript, and CSS.
 
 `npm run test:integration` requires a desktop-capable VS Code/Electron environment. In the current managed container, Electron exits before extension load due to sandbox/display restrictions.

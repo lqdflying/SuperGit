@@ -32,6 +32,23 @@ Use `MAJOR.MINOR.PATCH` from `package.json` (format `X.Y.Z`):
 6. Push, tag `v<version>` matching `package.json`, create GitHub release with `supergit-<version>.vsix` asset
 7. Verify asset uploaded
 
+## What `vsce package` bundles
+
+`npm run package` produces `supergit-<version>.vsix` from `package.json`. These ship **inside the VSIX** automatically (unless listed in `.vscodeignore`):
+
+| File | Role |
+|------|------|
+| `CHANGELOG.md` | Marketplace/release notes (`extension/changelog.md` in VSIX) — **update on every version bump** |
+| `README.md` | Extension details page (`extension/readme.md`) |
+| `LICENSE` / `LICENSE.txt` | License |
+| `assets/icon.png` | Extension/marketplace icon (`package.json` → `"icon"`) |
+| `assets/logo.png` | Webview title logo (loaded at runtime) |
+| `dist/extension.js` | Extension host bundle |
+| `dist/webview/main.js` | Webview React bundle |
+| `media/styles.css` | Webview CSS |
+
+Release checklist must include a dated `CHANGELOG.md` entry **before** `npm run package` so the packaged VSIX carries the correct notes. Icon/logo changes require rebuilding and repackaging; they are not separate publish steps.
+
 ## Policies
 
 - Do **not** publish to VS Code Marketplace from agent actions unless maintainer explicitly requests and provides credentials
