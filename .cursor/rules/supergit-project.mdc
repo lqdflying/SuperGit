@@ -9,9 +9,10 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 
 ## Source of truth
 
-- Product behavior/UI: read all files in `Design/` before UI or behavior changes.
-- Graph spec: `Design/git-graph-extension-spec-v4.md` · mock: `Design/git-graph-v4-final.jsx`
-- Branch History spec: `Design/branch-history-coding-guide.md` · mock: `Design/branch-history-v2.jsx`
+- Product behavior/UI: **`.cursor/rules/supergit-*.mdc`** (this file + scoped rules below). Do not rely on deleted `Design/` mockups.
+- Commit graph: `supergit-commit-graph.mdc`
+- Webview/CSP/panel: `supergit-webview.mdc`
+- Branch history: `supergit-branch-history.mdc`
 - Assets: `assets/icon.png` (package/panel icon), `assets/logo.png` (webview logo)
 
 ## Design goals

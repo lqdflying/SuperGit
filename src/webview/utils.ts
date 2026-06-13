@@ -1,5 +1,31 @@
-import type { BranchInfo, BranchLifecycle, BranchLifecycleStatus, RemoteBranchInfo } from "../shared/types";
+import type { BranchInfo, BranchLifecycle, BranchLifecycleStatus, CommitNode, RemoteBranchInfo } from "../shared/types";
+import { graph } from "../shared/tokens";
 import type { ThemeColors } from "../shared/themeColors";
+
+export function getActiveLaneCount(commits: CommitNode[]): number {
+  if (commits.length === 0) {
+    return 1;
+  }
+
+  let maxLane = 1;
+  for (const commit of commits) {
+    maxLane = Math.max(
+      maxLane,
+      commit.inputSwimlanes?.length ?? 0,
+      commit.outputSwimlanes?.length ?? 0,
+      commit.swimlaneIndex + 1
+    );
+  }
+
+  return maxLane;
+}
+
+/** Graph SVG + column width from active swimlane count (matches GraphCanvas sizing). */
+export function graphColumnWidth(laneCount: number): number {
+  const laneWidth = laneCount * graph.laneWidth + 14;
+  const minColumnWidth = 80;
+  return Math.max(minColumnWidth, laneWidth);
+}
 
 export function branchColor(index: number, theme: ThemeColors): string {
   return theme.branch[index % theme.branch.length];

@@ -123,8 +123,8 @@ export function BranchHistoryTab({
 
 function SummaryStat({ label, count, color }: { label: string; count: number; color: string }) {
   return (
-    <span className="branch-history-summary-stat" style={{ color }}>
-      <strong>{count}</strong>
+    <span className="branch-history-summary-stat">
+      <strong style={{ color }}>{count}</strong>
       <span>{label}</span>
     </span>
   );

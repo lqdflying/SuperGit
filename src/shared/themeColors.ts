@@ -21,6 +21,7 @@ export interface ThemeColors {
   untracked: string;
   trackArrow: string;
   selection: string;
+  selectionFg: string;
   hover: string;
   tagBg: string;
   tagBorder: string;

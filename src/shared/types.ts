@@ -1,3 +1,8 @@
+export interface SwimlaneNode {
+  id: string;
+  colorIndex: number;
+}
+
 export interface CommitNode {
   hash: string;
   hashShort: string;
@@ -7,6 +12,10 @@ export interface CommitNode {
   date: string;
   branch: string;
   branchIndex: number;
+  swimlaneIndex: number;
+  inputSwimlanes?: SwimlaneNode[];
+  outputSwimlanes?: SwimlaneNode[];
+  parentSwimlanes?: number[];
   parents: string[];
   refs: string[];
   tags: string[];

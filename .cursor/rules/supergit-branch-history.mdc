@@ -1,15 +1,14 @@
 ---
-description: Branch History tab — data layer, messaging, SVG timeline, and design refs
-globs: src/webview/components/history/**,src/git/branch-lifecycle.ts,src/git/branch-status.ts,Design/branch-history*
+description: Branch History tab — data layer, SVG timeline, status algorithm, and UX rules
+globs: src/webview/components/history/**,src/git/branch-lifecycle.ts,src/git/branch-status.ts
 alwaysApply: false
 ---
 
 # Branch History Tab
 
-## Design refs
+Three complementary views: **Commit Graph** (commit-centric), **Branch Tracking** (sync-centric), **Branch History** (time-centric — one horizontal lane per branch).
 
-- Spec: `Design/branch-history-coding-guide.md`
-- Visual mock: `Design/branch-history-v2.jsx`
+Answers: which branches diverged/stale, where pushed vs unpushed, multi-remote divergence. Signature viz: **ghost track** under diverged lanes (faded default-branch progression since LCA).
 
 ## Data flow
 
@@ -20,44 +19,104 @@ App (tab=history) → request-branch-history { dateRange }
   → BranchHistoryTab → execute-branch-action (on success: reload branches/remotes/history/commits)
 ```
 
-Messages/types in `src/shared/types.ts`: `BranchLifecycle`, `BranchHistoryPayload`, `request-branch-history`, `branch-history-data`, loading scope `branch-history`.
+Messages/types: `BranchLifecycle`, `BranchHistoryPayload`, loading scope `branch-history` in `src/shared/types.ts`.
 
-## Git layer (`branch-lifecycle.ts`)
+## Git layer
 
 | Helper | Notes |
 |--------|-------|
-| `resolveDefaultBranch` | `origin/HEAD` → `main` → `master` → first local |
-| `resolveHistoryDateWindow` | `presetDays: null` (All) **capped at 90d** — separate from graph date logic |
-| `getBranchLifecycles` | local lifecycles + remote-only (`!localBranchName`) |
+| `resolveDefaultBranch` | `origin/HEAD` symbolic ref → `main` → `master` → first local |
+| `resolveHistoryDateWindow` | `presetDays: null` (All) **capped at 90d** — unlike graph unbounded All |
+| `getBranchLifecycles` | local lifecycles + remote-only (`!localBranchName` from `getRemoteBranches`) |
 | `computePerRemoteDivergence` | per-remote `{remote}/{defaultBranch}...branch` behind counts |
-| `sortBranchLifecycles` | default → diverged → active → remote-only → merged |
+| `sortBranchLifecycles` | default → diverged (severe→high→mild) → active → remote-only → merged |
 
-Status algorithm: `branch-status.ts` → `detectStatus`, `generateDescription`, `STALE_THRESHOLD_DAYS = 7`.
+`branch-status.ts`: `detectStatus`, `generateDescription`, `STALE_THRESHOLD_DAYS = 7`.
+
+### Status algorithm
+
+| Status | Condition |
+|--------|-----------|
+| merged | tip is ancestor of default branch (wins over stale) |
+| diverged mild | ahead>0 and behind 1–5 |
+| diverged high | behind 6–12 |
+| diverged severe | behind 13+ |
+| active | behind=0 |
+| remote-only | no local `refs/heads/<name>` |
+
+**Stale** = secondary flag when `daysSinceActivity > 7` on non-merged locals — not a primary status.
+
+## Tab behavior
+
+- Lazy load: `request-branch-history` only when `tab === "history"` (not in `loadInitialData`).
+- Shared `dateRange` across tabs; switching tabs does **not** reset it.
+- First visit: if range still default `7d`, promote to `30d` once (`getState()` flag).
+- Default selection: checked-out → first diverged → default branch.
+- `.current` = checked out; `.selected` = detail/quick-actions target.
+
+## Layout constants
+
+| Element | Size |
+|---------|------|
+| Label column | `220px` (`LABEL_W`) |
+| Detail panel | `320px` fixed (no splitter v1) |
+| Day column | `30px` (`DAY_W`) |
+| Normal lane | `72px` |
+| Diverged lane | `96px` (`72 + DIV_GAP(14) + 10`) |
+| Bar height | `8px` |
+| Commit dot | `3.5px` (`3px` on default branch) |
+
+## SVG rules — DO
+
+- Time flows left→right; default branch topmost with thicker bar.
+- Hash labels at both bar ends; remote triangle flags only when `behindLocal > 0`.
+- Ghost track for **all diverged local** branches only.
+- Three-tier gridlines: daily subtle, weekly labeled, Today accent.
+- Remote-only: dashed bar, `remoteColor`, opacity ~0.35, no ghost track.
+- Theme via `useThemeColors()` / `--sg-history-*`; no hardcoded hex in components.
+
+## SVG rules — DO NOT
+
+- Cross-lane fork/merge connector curves between lanes.
+- Ghost track for active, merged, or remote-only lanes.
+- Remote markers when fully pushed (`behindLocal = 0`).
+- Use `stale` as primary status.
+- Invalid SVG attrs like `color-mix` — use `fillOpacity` / `strokeOpacity`.
+
+## Light theme
+
+`body.vscode-light`: darken `--sg-history-*` tokens for contrast. Selected lane labels: `--selection-fg` on `.branch-history-lane-label.selected`. Raise label/hash/LCA opacity in `GhostTrack` / `BranchLane`.
 
 ## Webview components
 
 | File | Role |
 |------|------|
-| `BranchHistoryTab.tsx` | Summary, legend, selection, detail panel |
-| `TimelineSvg.tsx` | Grid, lane layout |
+| `BranchHistoryTab.tsx` | Summary strip, legend, selection, detail |
+| `TimelineSvg.tsx` | Grid + lane layout |
 | `BranchLane.tsx` | Label, bar, dots, stale pill |
-| `GhostTrack.tsx` | Diverged-only faded main track + LCA connector |
-| `RemoteMarker.tsx` | Triangle flag; bracket when `behindLocal > 0` |
-| `HistoryDetail.tsx` | Metrics, remote cards, contextual quick actions |
+| `GhostTrack.tsx` | Diverged ghost + LCA connector |
+| `RemoteMarker.tsx` | Triangle + unpushed bracket |
+| `HistoryDetail.tsx` | Metrics, remote cards, quick actions |
 
-## Tests
+Reuse graph `DateRangeBar` — do not duplicate under `history/`.
 
-- `src/test/unit/branch-status.test.ts` — TC-BH01..BH08 + `generateDescription`
-- `src/test/unit/branch-lifecycle.test.ts` — TC-BH09..BH13, `getBranchLifecycles` mock integration
-- Mock pitfall: `mockResolvedValueOnce` queue leaks across tests — use exact call counts or `mockReset()` in `beforeEach`
+## Contextual actions
 
-## Contextual actions (detail panel)
+Same `execute-branch-action` as Tracking — always pass `branchName` + `remote`.
 
-| Status | Primary action |
-|--------|----------------|
-| synced | none |
+| Status | Primary |
+|--------|---------|
+| synced | — |
 | ahead | Push N |
 | behind | Pull N |
 | diverged | Push + Pull |
 | no-upstream | Set Upstream |
-| remote-only | Create Local Branch (pull path) |
+| remote-only | Create Local Branch |
+
+**Out of scope v1:** rebase, PR, checkout, copy name, detail resize, cross-tab graph navigation.
+
+## Tests
+
+- `branch-status.test.ts` — TC-BH01..BH08 + `generateDescription`
+- `branch-lifecycle.test.ts` — TC-BH09..BH13
+- Mock pitfall: `mockResolvedValueOnce` queue leaks — `mockReset()` in `beforeEach`

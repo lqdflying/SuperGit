@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.2.0 - 2026-06-13
+
+### Added
+
+- **Branch History** tab: horizontal timeline lanes, divergence ghost tracks, remote push markers, summary strip, and contextual quick actions (`branch-lifecycle.ts`, `branch-status.ts`, `components/history/`).
+- **Native swimlane commit graph**: topology-driven lane assignment (`swimlanes.ts`) with per-row SVG rendering aligned to VS Code SCM graph behavior.
+- Commit table **Author**, **Date**, and **Hash** columns; hash copy icon wired to `copy-hash` action.
+- README screenshot for Branch History; updated Commit Graph and Branch Tracking screenshots.
+- Cursor rules: `supergit-commit-graph.mdc`; Design folder guidance absorbed into `.cursor/rules/` and removed from repo.
+
+### Changed
+
+- Tab bar uses pill-style buttons with border, hover, and accent active state.
+- Commit graph uses `--topo-order` log and dynamic graph column width (no fixed lane cap).
+- `AGENTS.md` and agent rules reference `.cursor/rules/` instead of `Design/`.
+
+### Fixed
+
+- Commit table metadata no longer clipped when the graph pane is narrow (horizontal scroll + sticky header).
+- Row keyboard handler no longer intercepts Enter/Space on the hash copy button.
+- Branch History light-theme contrast for lane labels, hashes, LCA text, and summary stats.
+- Parser/ref handling: `remoteNames` for slash remotes, `HEAD` vs `{remote}/HEAD`, swimlane merge-parent join-back.
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (118 tests)
+- `npm run build`
+- `npm run package`
+
 ## 1.1.1 - 2026-06-13
 
 ### Fixed

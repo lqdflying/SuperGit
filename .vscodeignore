@@ -4,7 +4,6 @@
 **/.agents/**
 **/.codex/**
 **/.gitignore
-**/Design/**
 **/node_modules/**
 **/coverage/**
 **/src/**

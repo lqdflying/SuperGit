@@ -34,7 +34,7 @@ export function GhostTrack({
 
   return (
     <g>
-      <text x={LABEL_WIDTH - 6} y={mainGhostY + BAR_HEIGHT / 2 + 3} textAnchor="end" fontSize={9} fill={mainC} opacity={0.45} fontWeight={500}>
+      <text x={LABEL_WIDTH - 6} y={mainGhostY + BAR_HEIGHT / 2 + 3} textAnchor="end" fontSize={9} fill={mainC} opacity={0.82} fontWeight={600}>
         {defaultBranch}
       </text>
       <rect x={lcaX} y={mainGhostY} width={Math.max(mainEndX - lcaX, 4)} height={BAR_HEIGHT} rx={BAR_HEIGHT / 2} fill={mainC} opacity={0.15} />
@@ -43,9 +43,9 @@ export function GhostTrack({
         .map((day) => (
           <circle key={day} cx={lx(day)} cy={mainGhostY + BAR_HEIGHT / 2} r={2.5} fill="none" stroke={mainC} strokeWidth={1.2} opacity={0.35} />
         ))}
-      <line x1={lcaX} y1={barY + BAR_HEIGHT} x2={lcaX} y2={mainGhostY} stroke={theme.fgMuted} strokeWidth={1} strokeDasharray="2,2" opacity={0.3} />
+      <line x1={lcaX} y1={barY + BAR_HEIGHT} x2={lcaX} y2={mainGhostY} stroke={theme.fgDim} strokeWidth={1} strokeDasharray="2,2" opacity={0.55} />
       {branch.hashLca && (
-        <text x={lcaX - 4} y={barY + BAR_HEIGHT + (mainGhostY - barY - BAR_HEIGHT) / 2 + 3} textAnchor="end" fontSize={7.5} fill={theme.fgMuted} opacity={0.5}>
+        <text x={lcaX - 4} y={barY + BAR_HEIGHT + (mainGhostY - barY - BAR_HEIGHT) / 2 + 3} textAnchor="end" fontSize={7.5} fill={theme.fgDim} opacity={0.9}>
           LCA {branch.hashLca}
         </text>
       )}

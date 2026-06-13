@@ -72,19 +72,24 @@ export function BranchLane({
       {isSelected && <rect x={0} y={laneTop - 2} width={3} height={laneHeight} fill={brC} rx={1} />}
 
       <foreignObject x={10} y={laneTop + 2} width={LABEL_WIDTH - 16} height={laneHeight - 8}>
-        <div className="branch-history-lane-label">
+        <div className={`branch-history-lane-label${isSelected ? " selected" : ""}`}>
           <div className="branch-history-lane-title">
             <div className="branch-dot" style={{ background: brC, boxShadow: isSelected ? `0 0 8px ${brC}55` : undefined }} />
-            <span className="branch-history-lane-name" style={{ color: isSelected ? theme.fgBright : theme.fg }}>
+            <span className="branch-history-lane-name" style={{ color: isSelected ? undefined : theme.fg }}>
               {branch.remoteOnly ? `${branch.remote}/${branch.name}` : branch.name}
             </span>
             {branch.isCurrent && <CurrentBadge />}
           </div>
           <div className="branch-history-lane-meta">
             {branch.remoteOnly ? (
-              <span style={{ color: theme.fgMuted, fontWeight: 600 }}>no local branch</span>
+              <span style={{ color: isSelected ? undefined : theme.fgMuted, fontWeight: 600 }}>no local branch</span>
             ) : (
-              <span style={{ color: statusColor(branch.status, branch.severity, theme), fontWeight: 600 }}>
+              <span
+                style={{
+                  color: isSelected ? undefined : statusColor(branch.status, branch.severity, theme),
+                  fontWeight: 600
+                }}
+              >
                 {branch.status === "active" && "● Active"}
                 {branch.status === "diverged" && `⚠ Diverged${branch.severity ? ` · ${branch.severity}` : ""}`}
                 {branch.status === "merged" && "✓ Merged"}
@@ -92,11 +97,13 @@ export function BranchLane({
             )}
             {branch.stale && <span className="branch-history-stale-tag">stale</span>}
             {!isMain && !branch.remoteOnly && branch.status !== "merged" && (branch.aheadOfMain > 0 || branch.behindMain > 0) && (
-              <span style={{ fontFamily: "monospace", color: theme.fgMuted }}>
-                {branch.aheadOfMain > 0 && <span style={{ color: theme.ahead }}>+{branch.aheadOfMain}</span>}
+              <span style={{ fontFamily: "monospace", color: isSelected ? undefined : theme.fgDim }}>
+                {branch.aheadOfMain > 0 && <span style={{ color: isSelected ? undefined : theme.ahead }}>+{branch.aheadOfMain}</span>}
                 {branch.aheadOfMain > 0 && branch.behindMain > 0 && " "}
                 {branch.behindMain > 0 && (
-                  <span style={{ color: branch.behindMain > 10 ? theme.historyDanger : theme.historyWarn }}>-{branch.behindMain}</span>
+                  <span style={{ color: isSelected ? undefined : branch.behindMain > 10 ? theme.historyDanger : theme.historyWarn }}>
+                    -{branch.behindMain}
+                  </span>
                 )}
               </span>
             )}
@@ -132,7 +139,7 @@ export function BranchLane({
           />
         ))}
 
-      <text x={startX} y={barY - 5} textAnchor="middle" fontSize={8.5} fill={theme.fgMuted} opacity={0.7}>
+      <text x={startX} y={barY - 5} textAnchor="middle" fontSize={8.5} fill={theme.fgDim} opacity={0.92}>
         {branch.hashStart}
       </text>
       <text
@@ -142,7 +149,7 @@ export function BranchLane({
         fontSize={8.5}
         fontWeight={600}
         fill={branch.status === "diverged" ? (branch.severity === "mild" ? theme.historyWarn : theme.historyDanger) : branch.status === "merged" ? theme.historyMerged : theme.fgDim}
-        opacity={0.8}
+        opacity={0.95}
       >
         {branch.hashEnd}
       </text>

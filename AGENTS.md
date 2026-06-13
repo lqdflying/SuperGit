@@ -5,16 +5,18 @@ These notes capture the practical lessons from building and debugging the SuperG
 ## Project Intent
 
 - Build a VS Code extension named `SuperGit`.
-- The source of truth for product behavior and UI is the `Design/` folder.
-- Use `Design/git-graph-extension-spec.md` (or v4) for graph/tracking; `Design/branch-history-coding-guide.md` for Branch History.
-- Visual refs: `Design/git-graph-extension-ui-v2.jsx` / `git-graph-v4-final.jsx`; `Design/branch-history-v2.jsx` for history tab.
+- **Source of truth for product behavior/UI:** `.cursor/rules/supergit-*.mdc` (not the retired `Design/` folder).
+  - Commit graph / swimlanes: `supergit-commit-graph.mdc`
+  - Webview / CSP / tabs: `supergit-webview.mdc`
+  - Branch history: `supergit-branch-history.mdc`
+  - Project-wide: `supergit-project.mdc`
 - Use assets from `assets/`:
   - `assets/icon.png` for the extension/package/panel icon.
   - `assets/logo.png` for the webview title/logo.
 
 ## Design Lessons
 
-- Read all files in `Design/` before changing UI or behavior.
+- Read the relevant `.cursor/rules/supergit-*.mdc` files before changing UI or behavior.
 - Preserve the design goals:
   - dark VS Code-native webview
   - commit graph tab
@@ -111,7 +113,7 @@ Pass explicit `branchName` and `remote` from the webview through `execute-branch
 
 ## Branch History UX Lessons
 
-Fine-tuning notes for `src/webview/components/history/` and `src/git/branch-lifecycle.ts`. Full spec: `Design/branch-history-coding-guide.md`.
+Fine-tuning notes for `src/webview/components/history/` and `src/git/branch-lifecycle.ts`. Full rules: `.cursor/rules/supergit-branch-history.mdc`.
 
 ### Tab & data loading
 
@@ -143,6 +145,7 @@ Out of scope v1: rebase, PR, checkout, copy name, detail panel resize, cross-tab
 
 - Timeline constants: `LABEL_W=220`, `DAY_W=30`, detail panel `320px` (`.branch-history-detail`).
 - History tokens: `--sg-history-*` in `media/styles.css`; read in `theme.ts` / `ThemeProvider`.
+- **Light theme:** darken `--sg-history-*` under `body.vscode-light`; selected lane labels use `--selection-fg`; raise opacity on lane labels/hashes/LCA in `GhostTrack` / `BranchLane`.
 - SVG: use theme colors from `useThemeColors()`; avoid invalid SVG attrs like `color-mix` — use `fillOpacity` / `strokeOpacity`.
 
 ### Native date picker theming
@@ -162,18 +165,20 @@ Out of scope v1: rebase, PR, checkout, copy name, detail panel resize, cross-tab
 
 ## Graph Tab UX Lessons
 
-Fine-tuning notes for commit graph/detail work in the same session:
+Fine-tuning notes for commit graph/detail work. Full swimlane + table rules: `.cursor/rules/supergit-commit-graph.mdc`.
 
 - Scope commit history through `historyScope` in `App.tsx`; reset pagination when scope changes.
 - `BranchSidebar` supports All branches, local filters, remote filters, and selected styling.
 - Commit detail panel width is ratio-based (`detailShare`, default `0.36`, clamp `0.28`–`0.48`), persisted in webview state as `detailShare`.
 - Opening commit file diffs should use `vscode.diff` with `preview: false`, `preserveFocus: true`, and `ViewColumn.Beside` so the SuperGit panel keeps focus.
-- Render merge-parent continuation stubs in `CommitTable` when an off-page parent would otherwise break lane continuity.
-- Keep commit table metadata on one line: widen AUTHOR/DATE/HASH columns and use `white-space: nowrap`.
-- `formatShortDate` in `src/webview/utils.ts` should render `MM/DD HH:mm` (24h).
-- Commit list dates in the graph table use `formatRelativeTime()` (`5m ago`, `2h ago`, …).
-- Visual tokens: `media/styles.css` `--sg-*` aliases (VS Code theme + fallbacks); `src/shared/tokens.ts` fallback palette for extension host/tests; `src/webview/theme.ts` reads live CSS vars; graph density: `laneWidth` 22, `rowHeight` 32, `maxLanes` 5.
-- `GraphCanvas` uses bezier edges with SVG glow filters; merge nodes = ring + inner dot; HEAD = dashed outer ring.
+- **Swimlanes:** topology-driven lanes in `src/git/swimlanes.ts` (`assignSwimlanes`), wired from `parseCommits`. Per-row SVG in `GraphCanvas` — not ref-based lanes or node-to-node stair-step beziers. No active-lane cap; `graphColumnWidth()` min 80px for header.
+- **Parser pitfalls:** pass `remoteNames` into `parseRefs`; filter only `${remote}/HEAD`, keep plain `HEAD` for checked-out badge; slash remotes need `parseRemoteRefs`.
+- **Commit table metadata:** Author (140px), Date (`formatRelativeTime`), Hash + copy icon (`copy-hash` action). Copy icon on row hover/selected.
+- **Table layout pitfalls:** do not use fixed `min-width` + `overflow-x: hidden` on `.commit-scroll` — narrow graph panes (detail split) clip Hash. Use `overflow: auto`, header inside scroll with `sticky top`, `commit-table-body { width: max-content }`.
+- **Keyboard:** row `role="button"` with nested copy button — gate `onKeyDown` with `event.target === event.currentTarget`.
+- Render merge-parent continuation stubs when an off-page parent would break lane continuity.
+- `formatShortDate` → `MM/DD HH:mm` (24h); list dates use `formatRelativeTime()`.
+- Visual tokens: `media/styles.css` `--sg-*`; `ThemeProvider` + `readThemeColors()`; graph density `laneWidth` 22, `rowHeight` 32.
 - Shared UI: `Avatar.tsx`, `badges.tsx` (`RefBadge`, `TagBadge`, `HeadBadge`).
 
 ## Extension Architecture

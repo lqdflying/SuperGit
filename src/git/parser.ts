@@ -1,5 +1,6 @@
 import type { CommitFileChange, CommitFileStatus, CommitNode, RemoteConfig } from "../shared/types";
-import { colors, graph } from "../shared/tokens";
+import { colors } from "../shared/tokens";
+import { assignSwimlanes } from "./swimlanes";
 
 export const FIELD_SEP = "\x1f";
 export const RECORD_SEP = "\x1e";
@@ -25,7 +26,7 @@ export function parseCommits(raw: string, remoteNames: string[] = ["origin", "up
     }
 
     const [hash, hashShort, message, author, authorEmail, date, parentsRaw, refsRaw] = parts;
-    const parsedRefs = parseRefs(refsRaw);
+    const parsedRefs = parseRefs(refsRaw, remoteNames);
     const parents = parentsRaw.trim() ? parentsRaw.trim().split(/\s+/) : [];
 
     commits.push({
@@ -40,11 +41,12 @@ export function parseCommits(raw: string, remoteNames: string[] = ["origin", "up
       tags: parsedRefs.tags,
       branch: "",
       branchIndex: 0,
+      swimlaneIndex: 0,
       isMerge: parents.length > 1
     });
   }
 
-  assignLanes(commits, remoteNames, defaultBranch);
+  assignSwimlanes(commits, remoteNames, defaultBranch);
   return commits;
 }
 
@@ -86,12 +88,38 @@ export function parseLocalBranchRows(raw: string): LocalBranchRow[] {
     .filter((branch) => Boolean(branch.name));
 }
 
-export function parseRemoteRefs(raw: string): string[] {
+const DEFAULT_REMOTE_NAMES = ["origin", "upstream", "backup"];
+
+/** True only for symbolic remote HEAD refs like `origin/HEAD`, not branches named `feature/HEAD`. */
+export function isRemoteHeadRef(ref: string, remoteNames: string[] = DEFAULT_REMOTE_NAMES): boolean {
+  const trimmed = ref.trim();
+  if (!trimmed || trimmed === "HEAD") {
+    return false;
+  }
+
+  return remoteNames.some((remote) => trimmed === `${remote}/HEAD`);
+}
+
+function isRemoteRefSymbolicHead(ref: string): boolean {
+  const parts = ref.split("/");
+  return parts.length === 2 && parts[1] === "HEAD";
+}
+
+export function parseRemoteRefs(raw: string, remoteNames: string[] = DEFAULT_REMOTE_NAMES): string[] {
   return raw
     .trim()
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line && !line.endsWith("/HEAD"));
+    .filter((line) => {
+      if (!line || line === "HEAD") {
+        return false;
+      }
+      if (isRemoteHeadRef(line, remoteNames)) {
+        return false;
+      }
+      // Fallback when caller did not pass slash-containing remote names yet.
+      return remoteNames.length > 0 || !isRemoteRefSymbolicHead(line);
+    });
 }
 
 export function parseNameStatus(raw: string): CommitFileChange[] {
@@ -121,7 +149,7 @@ export function parseNameStatus(raw: string): CommitFileChange[] {
     .filter((file) => Boolean(file.path));
 }
 
-function parseRefs(raw: string): { refs: string[]; tags: string[] } {
+function parseRefs(raw: string, remoteNames: string[]): { refs: string[]; tags: string[] } {
   const refs: string[] = [];
   const tags: string[] = [];
 
@@ -132,7 +160,15 @@ function parseRefs(raw: string): { refs: string[]; tags: string[] } {
     }
 
     if (ref.startsWith("HEAD -> ")) {
-      refs.push("HEAD", ref.replace("HEAD -> ", "").trim());
+      const target = ref.replace("HEAD -> ", "").trim();
+      refs.push("HEAD");
+      if (!isRemoteHeadRef(target, remoteNames)) {
+        refs.push(target);
+      }
+      continue;
+    }
+
+    if (isRemoteHeadRef(ref, remoteNames)) {
       continue;
     }
 
@@ -150,7 +186,7 @@ function parseRefs(raw: string): { refs: string[]; tags: string[] } {
   };
 }
 
-function findMainBranchName(commits: CommitNode[], defaultBranch: string): string {
+export function findMainBranchName(commits: CommitNode[], defaultBranch: string): string {
   for (const commit of commits) {
     for (const ref of commit.refs) {
       if (ref === "main" || ref === "master") {
@@ -161,53 +197,39 @@ function findMainBranchName(commits: CommitNode[], defaultBranch: string): strin
   return defaultBranch === "master" || defaultBranch === "main" ? defaultBranch : "main";
 }
 
-function assignLanes(commits: CommitNode[], remoteNames: string[], defaultBranch = "main"): void {
-  const mainBranch = findMainBranchName(commits, defaultBranch);
-  const branchLane = new Map<string, number>();
-  const parentBranch = new Map<string, { display: string; laneKey: string }>();
-  branchLane.set(mainBranch, 0);
-  let nextLane = 1;
-
-  for (const commit of commits) {
-    const inherited = parentBranch.get(commit.hash);
-    const branchRef = findLocalBranchRef(commit.refs, remoteNames);
-    const branch = branchRef || inherited?.display || mainBranch;
-    const laneKey = branchRef || inherited?.laneKey || branch;
-    commit.branch = branch;
-
-    if (!branchLane.has(laneKey)) {
-      let lane: number;
-      if (branch === mainBranch || laneKey === mainBranch) {
-        lane = 0;
-      } else {
-        const sideLanes = graph.maxLanes - 1;
-        lane = 1 + ((nextLane - 1) % sideLanes);
-        nextLane += 1;
-      }
-      branchLane.set(laneKey, lane);
+export function findBranchRefForLane(refs: string[], remoteNames: string[]): string | undefined {
+  for (const ref of refs) {
+    if (ref === "HEAD" || isRemoteHeadRef(ref, remoteNames)) {
+      continue;
     }
-    commit.branchIndex = branchLane.get(laneKey) ?? 0;
 
-    for (const [index, parent] of commit.parents.entries()) {
-      if (index === 0) {
-        parentBranch.set(parent, { display: branch, laneKey });
-      } else if (!parentBranch.has(parent)) {
-        parentBranch.set(parent, {
-          display: branch,
-          laneKey: `${laneKey}:merge-${index}:${parent}`
-        });
-      }
+    const isRemote = remoteNames.some((remote) => ref === remote || ref.startsWith(`${remote}/`));
+    if (!isRemote) {
+      return ref;
     }
   }
+
+  for (const ref of refs) {
+    if (isRemoteHeadRef(ref, remoteNames)) {
+      continue;
+    }
+
+    const remote = remoteNames.find((name) => ref.startsWith(`${name}/`));
+    if (!remote) {
+      continue;
+    }
+
+    const branchName = ref.slice(remote.length + 1);
+    if (branchName) {
+      return branchName;
+    }
+  }
+
+  return undefined;
 }
 
 function findLocalBranchRef(refs: string[], remoteNames: string[]): string | undefined {
-  return refs.find((ref) => {
-    if (ref === "HEAD") {
-      return false;
-    }
-    return !remoteNames.some((remote) => ref === remote || ref.startsWith(`${remote}/`));
-  });
+  return findBranchRefForLane(refs, remoteNames);
 }
 
 function mapFileStatus(rawStatus: string): CommitFileStatus {

@@ -165,7 +165,7 @@ describe("getRemoteBranches", () => {
   it("discovers remote-only branches and links local names when present", async () => {
     mockedRunGit.mockImplementation(async (args) => {
       if (args[0] === "for-each-ref" && args.includes("refs/remotes/")) {
-        return ok("origin/main\norigin/feature/x\nupstream/release\n");
+        return ok("origin/HEAD\norigin/main\norigin/feature/x\nupstream/release\n");
       }
       if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {
         return ok("main\nfeature/x\n");
@@ -178,6 +178,7 @@ describe("getRemoteBranches", () => {
 
     const remoteBranches = await getRemoteBranches("/repo");
     expect(remoteBranches).toHaveLength(3);
+    expect(remoteBranches.some((branch) => branch.ref === "origin/HEAD")).toBe(false);
     expect(remoteBranches.find((branch) => branch.ref === "origin/main")?.localBranchName).toBe("main");
     expect(remoteBranches.find((branch) => branch.ref === "upstream/release")?.localBranchName).toBeUndefined();
   });

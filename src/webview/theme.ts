@@ -45,6 +45,7 @@ export function readThemeColors(root: HTMLElement = document.documentElement): T
     untracked: readVar(styles, "--sg-untracked", fallbackColors.untracked),
     trackArrow: readVar(styles, "--sg-fg-dim", fallbackColors.trackArrow),
     selection: readVar(styles, "--sg-selection", fallbackColors.selection),
+    selectionFg: readVar(styles, "--sg-selection-fg", fallbackColors.fgBright),
     hover: readVar(styles, "--sg-hover", fallbackColors.hover),
     tagBg: readVar(styles, "--sg-tag-bg", fallbackColors.tagBg),
     tagBorder: readVar(styles, "--sg-tag-border", fallbackColors.tagBorder),

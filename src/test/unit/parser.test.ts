@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIELD_SEP, RECORD_SEP, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes } from "../../git/parser";
+import { FIELD_SEP, RECORD_SEP, isRemoteHeadRef, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes } from "../../git/parser";
 
 const commitRecord = (parts: string[]) => `${parts.join(FIELD_SEP)}${RECORD_SEP}`;
 
@@ -20,8 +20,8 @@ describe("parseCommits", () => {
     expect(commits).toHaveLength(1);
     expect(commits[0].hashShort).toBe("a1b2c3d");
     expect(commits[0].message).toBe("fix: resolve db timeout");
-    expect(commits[0].refs).toContain("HEAD");
     expect(commits[0].refs).toContain("hotfix/db-timeout");
+    expect(commits[0].refs).toContain("HEAD");
     expect(commits[0].isMerge).toBe(false);
   });
 
@@ -45,6 +45,55 @@ describe("parseCommits", () => {
     expect(commits[0].tags).toContain("v2.3.0");
   });
 
+  it("preserves plain HEAD for detached checkout badge", () => {
+    const raw = commitRecord([
+      "hash",
+      "short",
+      "detached work",
+      "author",
+      "email",
+      "2026-06-10T00:00:00Z",
+      "parent",
+      "HEAD"
+    ]);
+
+    const commits = parseCommits(raw);
+    expect(commits[0].refs).toEqual(["HEAD"]);
+  });
+
+  it("drops custom remote HEAD decorations when remote names are provided", () => {
+    const raw = commitRecord([
+      "hash",
+      "short",
+      "message",
+      "author",
+      "email",
+      "2026-06-10T00:00:00Z",
+      "parent",
+      "HEAD -> pil/HEAD, pil/HEAD, pil/main"
+    ]);
+
+    const commits = parseCommits(raw, ["origin", "pil"]);
+    expect(commits[0].refs).toEqual(["HEAD", "pil/main"]);
+    expect(commits[0].branch).toBe("main");
+  });
+
+  it("drops remote HEAD decorations from commit refs", () => {
+    const raw = commitRecord([
+      "hash",
+      "short",
+      "message",
+      "author",
+      "email",
+      "2026-06-10T00:00:00Z",
+      "parent",
+      "HEAD -> origin/main, origin/HEAD, origin/main"
+    ]);
+
+    const commits = parseCommits(raw);
+    expect(commits[0].refs).toEqual(["HEAD", "origin/main"]);
+  });
+
   it("handles commits with no refs or tags", () => {
     const raw = commitRecord(["hash", "short", "message", "author", "email", "2026-06-10T00:00:00Z", "parent", ""]);
     const commits = parseCommits(raw);
@@ -60,7 +109,7 @@ describe("parseCommits", () => {
     expect(parseCommits(`not${FIELD_SEP}enough${RECORD_SEP}`)).toEqual([]);
   });
 
-  it("assigns stable lane indices by branch", () => {
+  it("keeps branch labels separate from lane topology for unlinked commits", () => {
     const raw = [
       commitRecord(["aaa", "aaa", "msg1", "a", "a@e", "2026-06-13T00:00:00Z", "", "main"]),
       commitRecord(["bbb", "bbb", "msg2", "b", "b@e", "2026-06-12T00:00:00Z", "", "feature/x"]),
@@ -68,31 +117,102 @@ describe("parseCommits", () => {
     ].join("");
 
     const commits = parseCommits(raw);
-    expect(commits[0].branchIndex).toBe(0);
-    expect(commits[1].branchIndex).toBe(1);
-    expect(commits[2].branchIndex).toBe(0);
+    expect(commits[0].branch).toBe("main");
+    expect(commits[1].branch).toBe("feature/x");
+    expect(commits.every((commit) => commit.branchIndex === 0)).toBe(true);
   });
 
-  it("cycles lanes after visible lane count", () => {
-    const raw = Array.from({ length: 9 }, (_, index) =>
-      commitRecord([`hash${index}`, `h${index}`, "msg", "dev", "d@e", "2026-06-13T00:00:00Z", "", `branch${index}`])
-    ).join("");
-
-    const commits = parseCommits(raw);
-    expect(commits[8].branchIndex).toBe(1);
-  });
-
-  it("assigns merge parents to distinct lanes when visible", () => {
+  it("assigns merge parents to distinct lanes when parent-linked", () => {
     const raw = [
       commitRecord(["merge", "merge", "Merge feature", "dev", "d@e", "2026-06-13T00:00:00Z", "mainParent featureParent", "main"]),
-      commitRecord(["mainParent", "mainP", "main commit", "dev", "d@e", "2026-06-12T00:00:00Z", "", "main"]),
-      commitRecord(["featureParent", "featP", "feature commit", "dev", "d@e", "2026-06-11T00:00:00Z", "", "feature/x"])
+      commitRecord(["mainParent", "mainP", "main commit", "dev", "d@e", "2026-06-12T00:00:00Z", "base", "main"]),
+      commitRecord(["featureParent", "featP", "feature commit", "dev", "d@e", "2026-06-11T00:00:00Z", "base", "feature/x"]),
+      commitRecord(["base", "base", "fork", "dev", "d@e", "2026-06-10T00:00:00Z", "", "main"])
     ].join("");
 
     const commits = parseCommits(raw);
     expect(commits[0].isMerge).toBe(true);
-    expect(commits[0].branchIndex).toBe(commits[1].branchIndex);
-    expect(commits[2].branchIndex).not.toBe(commits[0].branchIndex);
+    expect(commits[0].parentSwimlanes).toEqual([0, 1]);
+    expect(commits[2].swimlaneIndex).toBe(1);
+    expect(commits[3].swimlaneIndex).toBe(0);
+  });
+
+  it("assigns remote tracking refs to side lanes for merged branches", () => {
+    const raw = [
+      commitRecord([
+        "merge",
+        "merge",
+        "Merge pull request #37",
+        "dev",
+        "d@e",
+        "2026-06-13T00:00:00Z",
+        "mainParent featureParent",
+        "main, pil/main, origin/main"
+      ]),
+      commitRecord(["mainParent", "mainP", "main commit", "dev", "d@e", "2026-06-12T00:00:00Z", "featureBase", "main"]),
+      commitRecord([
+        "featureParent",
+        "featP",
+        "feat(oci_vm_create): add TierLevel tag validation",
+        "dev",
+        "d@e",
+        "2026-06-11T00:00:00Z",
+        "featureTip",
+        "origin/feature/oci-tierlevel-tag-rules"
+      ]),
+      commitRecord(["featureTip", "tip", "feature work", "dev", "d@e", "2026-06-10T00:00:00Z", "featureBase", "origin/feature/oci-tierlevel-tag-rules"]),
+      commitRecord(["featureBase", "base", "fork", "dev", "d@e", "2026-06-09T00:00:00Z", "", "main"])
+    ].join("");
+
+    const commits = parseCommits(raw, ["origin", "pil"]);
+    expect(commits[2].branch).toBe("feature/oci-tierlevel-tag-rules");
+    expect(commits[2].swimlaneIndex).toBe(1);
+    expect(commits[0].swimlaneIndex).toBe(0);
+  });
+
+  it("skips remote HEAD decorations when picking a lane branch", () => {
+    const raw = commitRecord([
+      "hash",
+      "short",
+      "message",
+      "author",
+      "email",
+      "2026-06-10T00:00:00Z",
+      "parent",
+      "origin/HEAD, origin/feature/oci-tierlevel-tag-rules"
+    ]);
+
+    const commits = parseCommits(raw, ["origin", "pil"]);
+    expect(commits[0].branch).toBe("feature/oci-tierlevel-tag-rules");
+    expect(commits[0].branchIndex).toBe(0);
+  });
+
+  it("prefers a local branch ref over remote tracking refs for lane assignment", () => {
+    const raw = commitRecord([
+      "hash",
+      "short",
+      "message",
+      "author",
+      "email",
+      "2026-06-10T00:00:00Z",
+      "parent",
+      "feature/x, origin/feature/x"
+    ]);
+
+    const commits = parseCommits(raw, ["origin"]);
+    expect(commits[0].branch).toBe("feature/x");
+  });
+
+  it("inherits a side lane for merge parents without branch decorations", () => {
+    const raw = [
+      commitRecord(["merge", "merge", "Merge PR", "dev", "d@e", "2026-06-13T00:00:00Z", "mainParent featureParent", "main"]),
+      commitRecord(["mainParent", "mainP", "main commit", "dev", "d@e", "2026-06-12T00:00:00Z", "base", "main"]),
+      commitRecord(["featureParent", "featP", "orphan feature commit", "dev", "d@e", "2026-06-11T00:00:00Z", "", ""]),
+      commitRecord(["base", "base", "fork", "dev", "d@e", "2026-06-10T00:00:00Z", "", "main"])
+    ].join("");
+
+    const commits = parseCommits(raw);
+    expect(commits[2].swimlaneIndex).toBe(1);
   });
 });
 
@@ -137,6 +257,35 @@ describe("branch ref parsers", () => {
   });
 
   it("filters remote HEAD refs", () => {
-    expect(parseRemoteRefs("origin/HEAD\norigin/main\nupstream/main")).toEqual(["origin/main", "upstream/main"]);
+    expect(parseRemoteRefs("origin/HEAD\norigin/main\nupstream/main", ["origin", "upstream"])).toEqual(["origin/main", "upstream/main"]);
+    expect(parseRemoteRefs("HEAD\npil/HEAD\norigin/feature/x", ["origin", "pil"])).toEqual(["origin/feature/x"]);
+    expect(parseRemoteRefs("foo/bar/HEAD\nfoo/bar/main", ["foo/bar"])).toEqual(["foo/bar/main"]);
+  });
+
+  it("identifies remote symbolic HEAD refs", () => {
+    expect(isRemoteHeadRef("origin/HEAD")).toBe(true);
+    expect(isRemoteHeadRef("upstream/HEAD")).toBe(true);
+    expect(isRemoteHeadRef("HEAD")).toBe(false);
+    expect(isRemoteHeadRef("origin/main")).toBe(false);
+    expect(isRemoteHeadRef("origin/feature/x")).toBe(false);
+    expect(isRemoteHeadRef("feature/HEAD")).toBe(false);
+    expect(isRemoteHeadRef("origin/feature/HEAD")).toBe(false);
+    expect(isRemoteHeadRef("foo/bar/HEAD", ["foo/bar"])).toBe(true);
+  });
+
+  it("keeps branch names ending in HEAD when not symbolic remote HEAD", () => {
+    const raw = commitRecord([
+      "hash",
+      "short",
+      "message",
+      "author",
+      "email",
+      "2026-06-10T00:00:00Z",
+      "parent",
+      "feature/HEAD, origin/feature/HEAD"
+    ]);
+
+    const commits = parseCommits(raw, ["origin"]);
+    expect(commits[0].refs).toEqual(["feature/HEAD", "origin/feature/HEAD"]);
   });
 });

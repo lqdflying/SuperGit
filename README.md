@@ -1,20 +1,25 @@
 # SuperGit
 
-SuperGit is a VS Code extension for visual Git history and branch-to-remote tracking. It opens a dark, VS Code-native webview with a commit graph, branch tracking diagram, multi-remote status, date/search controls, and guarded Git actions.
+SuperGit is a VS Code extension for visual Git history and branch-to-remote tracking. It opens a VS Code-native webview with a commit graph, branch tracking diagram, branch history timeline, multi-remote status, date/search controls, and guarded Git actions.
 
 ## Screenshots
 
 ### Commit Graph
 
-![SuperGit commit graph with branch lanes, merge nodes, and commit detail panel](assets/CommitGraph.png)
+![SuperGit commit graph with swimlane lanes, author/date/hash columns, and commit detail panel](assets/CommitGraph.png)
 
 ### Branch Tracking
 
-![SuperGit branch tracking with multi-remote ahead/behind status and quick actions](assets/BranchTracking.png)
+![SuperGit branch tracking with multi-remote ahead/behind status and contextual quick actions](assets/BranchTracking.png)
+
+### Branch History
+
+![SuperGit branch history timeline with diverged lanes, ghost tracks, and branch detail panel](assets/BranchHistory.png)
 
 ## Features
 
-- Commit graph with branch lanes, merge nodes, refs, tags, author/date/hash columns, and commit detail panel.
+- Commit graph with topology swimlanes, merge nodes, refs, tags, author/date/hash columns, and commit detail panel.
+- Branch history timeline: per-branch lanes, divergence ghost tracks, remote push markers, and contextual actions.
 - Date range filters for 7 days, 14 days, 30 days, All, and custom ranges.
 - Search by commit message, hash, author, branch refs, and tags.
 - Branch tracking view for local branches across multiple remotes.
@@ -116,8 +121,8 @@ where `<version>` is the `"version"` field in `package.json`.
 Current local verification:
 
 - TypeScript typecheck passes.
-- Unit tests pass: 67 tests.
+- Unit tests pass: 118 tests.
 - Coverage passes the design target for `src/git/*.ts`.
-- VSIX packaging passes and includes `CHANGELOG.md`, `README.md`, `LICENSE`, `assets/icon.png`, `assets/logo.png`, `assets/CommitGraph.png`, `assets/BranchTracking.png`, bundled extension/webview JavaScript, and CSS.
+- VSIX packaging passes and includes `CHANGELOG.md`, `README.md`, `LICENSE`, `assets/icon.png`, `assets/logo.png`, `assets/CommitGraph.png`, `assets/BranchTracking.png`, `assets/BranchHistory.png`, bundled extension/webview JavaScript, and CSS.
 
 `npm run test:integration` requires a desktop-capable VS Code/Electron environment. In the current managed container, Electron exits before extension load due to sandbox/display restrictions.

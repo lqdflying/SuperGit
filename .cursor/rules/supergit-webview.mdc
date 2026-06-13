@@ -69,9 +69,7 @@ Shared `DateRangeBar` uses `<input type="date">`. Native calendar popups follow 
 - `BranchSidebar`: All branches, local/remote filters, selected styling
 - Detail panel width is ratio-based (`detailShare`, default `0.36`, clamp `0.28`–`0.48`), persisted in webview state
 - Commit file diffs: `vscode.diff` with `preview: false`, `preserveFocus: true`, `ViewColumn.Beside`
-- `CommitTable`: render merge-parent continuation stubs when parent is off-page
-- Keep AUTHOR/DATE/HASH on one line (`white-space: nowrap`, fixed column widths)
-- `formatShortDate` → `MM/DD HH:mm` (24h) in `src/webview/utils.ts`
+- Swimlanes, commit table columns, parser pitfalls: **`supergit-commit-graph.mdc`**
 
 ## Branch tracking tab UX
 
@@ -113,29 +111,4 @@ Implementation: `src/webview/components/tracking/TrackingView.tsx`
 
 ## Branch history tab UX
 
-Implementation: `src/webview/components/history/` · spec: `Design/branch-history-coding-guide.md`
-
-- Third tab `"history"` in `App.tsx`; shared `dateRange` across tabs (do not reset on tab switch)
-- **Lazy load:** post `request-branch-history` only when `tab === "history"` (not in `loadInitialData`)
-- **First visit:** if range is still default `7d`, promote to `30d` once via `getState()` flag
-- Reuse `DateRangeBar`, `CurrentBadge`, `sortBranchLifecycles` / `branchColor` from `utils.ts`
-- Actions via `execute-branch-action` with explicit `branchName` + `remote` (same as Tracking)
-- **Out of scope v1:** rebase, PR, checkout, copy name, detail resize, cross-tab graph navigation
-
-### Selection & sort
-
-- Default selection: checked-out branch → first diverged lane → default branch
-- `.current` = checked out; `.selected` = detail/quick-actions target (separate styles)
-- Sort: default branch → diverged (severity: severe → high → mild) → active → remote-only → merged
-
-### Lanes & visualization
-
-- SVG timeline: `TimelineSvg`, `BranchLane`, `GhostTrack` (diverged only), `RemoteMarker`
-- Constants in `constants.ts`: `LABEL_W=220`, `DAY_W=30`, detail panel `320px`
-- Remote-only lanes: dashed style, no ghost track, status `remote-only`, primary **Create Local Branch**
-- History **All** preset capped at **90 days** server-side (`resolveHistoryDateWindow`) — unlike graph unbounded All
-
-### CSS tokens
-
-- `--sg-history-grid`, `--sg-history-grid-week`, `--sg-history-merged`, `--sg-history-stale`, `--sg-history-warn`, `--sg-history-danger`, `--sg-history-ok`
-- Layout: `.branch-history-summary`, `.branch-history-legend`, `.branch-history-timeline`, `.branch-history-detail`, `.branch-history-lane`
+Implementation: `src/webview/components/history/` · full rules: `supergit-branch-history.mdc`

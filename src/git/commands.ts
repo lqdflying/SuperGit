@@ -3,7 +3,7 @@ import type { BranchInfo, CommitFileChange, DateRange, HistoryScope, RemoteBranc
 import { DEFAULT_HISTORY_SCOPE, PAGE_SIZE } from "../shared/types";
 import { colors } from "../shared/tokens";
 import { getActiveRepository } from "./api";
-import { GIT_LOG_FORMAT, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes } from "./parser";
+import { GIT_LOG_FORMAT, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes, isRemoteHeadRef } from "./parser";
 import { runGit } from "./runner";
 
 export async function getCommits(
@@ -17,7 +17,7 @@ export async function getCommits(
   const remotes = await getRemotes(cwd);
   const remoteNames = remotes.map((remote) => remote.name);
   const needsClientFilter = searchText.trim().length > 0;
-  const args = ["log", "--date-order", `--format=${GIT_LOG_FORMAT}`];
+  const args = ["log", "--topo-order", `--format=${GIT_LOG_FORMAT}`];
 
   addDateArgs(args, dateRange);
   addScopeArgs(args, scope);
@@ -48,14 +48,18 @@ export async function getCommits(
   };
 }
 
+const REMOTE_REF_EXCLUDE = "refs/remotes/*/HEAD";
+
 export async function getBranches(cwd: string): Promise<BranchInfo[]> {
   const [branchResult, remoteRefResult, remotes, currentBranch] = await Promise.all([
     runGit(
       ["for-each-ref", "--format=%(refname:short)%09%(upstream:short)%09%(upstream:remotename)", "refs/heads/"],
       cwd
     ),
-    runGit(["for-each-ref", "--format=%(refname:short)", "refs/remotes/"],
-      cwd),
+    runGit(
+      ["for-each-ref", "--format=%(refname:short)", "refs/remotes/", `--exclude=${REMOTE_REF_EXCLUDE}`],
+      cwd
+    ),
     getRemotes(cwd),
     getCurrentBranch(cwd)
   ]);
@@ -65,7 +69,8 @@ export async function getBranches(cwd: string): Promise<BranchInfo[]> {
   }
 
   const branches = parseLocalBranchRows(branchResult.stdout);
-  const remoteRefs = new Set(parseRemoteRefs(remoteRefResult.stdout));
+  const remoteNames = remotes.map((remote) => remote.name);
+  const remoteRefs = new Set(parseRemoteRefs(remoteRefResult.stdout, remoteNames));
 
   return Promise.all(
     branches.map(async (branch, index): Promise<BranchInfo> => {
@@ -109,7 +114,10 @@ export async function getBranches(cwd: string): Promise<BranchInfo[]> {
 
 export async function getRemoteBranches(cwd: string): Promise<RemoteBranchInfo[]> {
   const [remoteRefResult, remotes, localBranchResult] = await Promise.all([
-    runGit(["for-each-ref", "--format=%(refname:short)", "refs/remotes/"], cwd),
+    runGit(
+      ["for-each-ref", "--format=%(refname:short)", "refs/remotes/", `--exclude=${REMOTE_REF_EXCLUDE}`],
+      cwd
+    ),
     getRemotes(cwd),
     runGit(["for-each-ref", "--format=%(refname:short)", "refs/heads/"], cwd)
   ]);
@@ -120,8 +128,13 @@ export async function getRemoteBranches(cwd: string): Promise<RemoteBranchInfo[]
 
   const localBranches = new Set(parseLocalBranchRows(localBranchResult.exitCode === 0 ? localBranchResult.stdout : "").map((branch) => branch.name));
   const remoteByName = new Map(remotes.map((remote) => [remote.name, remote]));
+  const remoteNames = remotes.map((remote) => remote.name);
 
-  return parseRemoteRefs(remoteRefResult.stdout).flatMap((ref): RemoteBranchInfo[] => {
+  return parseRemoteRefs(remoteRefResult.stdout, remoteNames).flatMap((ref): RemoteBranchInfo[] => {
+    if (isRemoteHeadRef(ref, remoteNames)) {
+      return [];
+    }
+
     const remote = remotes.find((candidate) => ref.startsWith(`${candidate.name}/`));
     if (!remote) {
       const fallbackRemote = ref.split("/")[0];

@@ -1,0 +1,67 @@
+---
+description: Commit graph swimlanes, parser, CommitTable layout, and native SCM parity
+globs: src/git/swimlanes.ts,src/git/parser.ts,src/webview/components/graph/**,media/styles.css
+alwaysApply: false
+---
+
+# Commit Graph
+
+## Native SCM vs webview
+
+VS Code’s built-in SCM Graph is workbench-native (`scmHistory.ts`), not a webview. SuperGit cannot inherit workbench widgets automatically.
+
+**Theme:** map `--vscode-*` → `--sg-*` in `media/styles.css`; `ThemeProvider` + `readThemeColors()` in `theme.ts`; `MutationObserver` on `data-vscode-theme-kind`. **Do not** add a parallel theme reader from `tokens.ts` in the webview.
+
+**Density:** SuperGit keeps `laneWidth` 22, `rowHeight` 32 (native uses ~11/22). Out of scope: `scmGraph.foreground1–5`, `SourceControlHistoryProvider` API.
+
+## Swimlane topology (parent-driven)
+
+Visual layout follows VS Code’s **swimlane state machine** on `--topo-order` log rows:
+
+| Layer | Module |
+|-------|--------|
+| Lane assignment | `src/git/swimlanes.ts` — `assignSwimlanes()`; lane columns are **parent-topology only** (not ref labels) |
+| Commit fields | `inputSwimlanes` / `outputSwimlanes`, `swimlaneIndex`, `parentSwimlanes[]` on `CommitNode` |
+| Renderer | `GraphCanvas` in `CommitTable.tsx` — **per-row** segments at row midline + quadratic arcs (`SWIMLANE_CURVE_RADIUS` ≈ 5px); not node-to-node stair-step beziers |
+| Git log | `--topo-order` in `commands.ts` |
+
+Rules:
+- Lane 0 = main line; merge second parents open side lanes until branch ends; recycle lanes when possible.
+- **No `maxLanes` cap** on active lane count — wide repos need all lanes visible.
+- Dynamic graph column: `--graph-column-width` via `graphColumnWidth(laneCount)`; **minimum 80px** so header label does not overflow at 1 lane.
+- Merge-parent join-back uses `parentSwimlanes[0]` for first-parent exit paths.
+- Render merge-parent **continuation stubs** when an off-page parent would break lane continuity.
+
+## Parser / ref pitfalls
+
+- Pass `remoteNames` into `parseCommits` → `parseRefs` / `parseRemoteRefs` so slash remotes (`foo/bar`) resolve correctly.
+- Filter only `${remote}/HEAD` via `isRemoteHeadRef` — **not** plain `HEAD` (needed for checked-out badge).
+- Custom remotes like `pil/HEAD` must match exact remote prefix, not substring `includes("/HEAD")`.
+- `branch` / ref colors are labels only; lane color comes from swimlane `colorIndex`.
+
+## Commit table columns
+
+Right of description: **Author** (140px), **Date** (`formatRelativeTime`), **Hash** (short SHA + copy icon).
+
+| Concern | Rule |
+|---------|------|
+| Copy | Icon button → `postMessage({ type: "execute-action", action: "copy-hash", commitHash })`; `stopPropagation` on click |
+| Icon UX | Copy icon visible on row hover / selected (like native SCM graph) |
+| Scroll | Header inside `.commit-scroll` with `position: sticky; top: 0` so horizontal scroll keeps header + rows aligned |
+| Narrow panes | **Do not** use fixed `min-width` + `overflow-x: hidden` — graph pane can be ~280px when detail split is wide. Use `overflow: auto` on `.commit-scroll`, `.commit-table-body { width: max-content; min-width: 100% }`, `.commit-rows { min-width: max-content }` |
+| Keyboard | Row is `role="button"` but hash is a nested `<button>`. Gate row `onKeyDown` with `event.target === event.currentTarget` so Enter/Space on copy does not select the row |
+| Selection | Only hash is copyable; author/date are display-only. `.app-shell { user-select: none }` is intentional |
+
+Column CSS: `.author-column`, `.date-column`, `.hash-column`; message column `flex: 1; min-width: 0` with ellipsis.
+
+## Graph tab UX (other)
+
+- History scoped via `historyScope` in `App.tsx`; reset pagination on scope change.
+- Detail panel: `detailShare` default `0.36`, clamp `0.28`–`0.48`, persisted in webview state.
+- File diffs: `vscode.diff` with `preview: false`, `preserveFocus: true`, `ViewColumn.Beside`.
+- Dates: list uses `formatRelativeTime()`; detail panel may use `formatFullDate` / `formatShortDate` (`MM/DD HH:mm`).
+
+## Tests
+
+- `src/test/unit/swimlanes.test.ts` — TC-SG01..SG06 (+ octopus merge cases).
+- Parser tests expect topology-based lanes after `assignSwimlanes()`.
