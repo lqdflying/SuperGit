@@ -26,6 +26,7 @@ import { DateRangeBar } from "./components/graph/DateRangeBar";
 import { PaginationBar } from "./components/graph/Pagination";
 import { TrackingView } from "./components/tracking/TrackingView";
 import { Icon } from "./icons";
+import { notifyThemeChanged } from "./ThemeProvider";
 import { defaultDate } from "./utils";
 import { getBootstrapLogo, getVsCodeApi, postMessage, postWebviewLog } from "./vscode";
 
@@ -143,6 +144,9 @@ export function App() {
           break;
         case "repo-changed":
           setNotice("Repository changed. Refreshing data.");
+          break;
+        case "theme-changed":
+          notifyThemeChanged();
           break;
       }
     };

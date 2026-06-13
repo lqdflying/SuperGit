@@ -1,9 +1,9 @@
-import { colors } from "../../../shared/tokens";
 import type { CommitAction, CommitFileChange, CommitNode } from "../../../shared/types";
+import { useThemeColors } from "../../ThemeProvider";
+import { branchColor, formatFullDate, formatRelativeTime } from "../../utils";
 import { Avatar } from "../Avatar";
 import { HeadBadge, RefBadge, TagBadge } from "../badges";
 import { Icon, type IconName } from "../../icons";
-import { branchColor, formatFullDate, formatRelativeTime } from "../../utils";
 
 const statusLabels: Record<CommitFileChange["status"], string> = {
   added: "A",
@@ -29,6 +29,8 @@ export function CommitDetail({
   onAction: (action: CommitAction) => void;
   onOpenFile: (file: CommitFileChange) => void;
 }) {
+  const theme = useThemeColors();
+
   if (!commit) {
     return (
       <aside className="detail-panel">
@@ -37,7 +39,7 @@ export function CommitDetail({
     );
   }
 
-  const color = branchColor(commit.branchIndex);
+  const color = branchColor(commit.branchIndex, theme);
   const actionRows: Array<{ action: CommitAction; label: string; icon: IconName }> = [
     { action: "cherry-pick", label: "Cherry-pick commit", icon: "branch" },
     { action: "revert", label: "Revert commit", icon: "refresh" },
@@ -71,7 +73,7 @@ export function CommitDetail({
           <DetailRow label="Commit" value={commit.hash} mono />
           <DetailRow label="Parents" value={commit.parents.join(" ") || "none"} mono />
           <DetailRow label="Branch" value={commit.branch || "-"} color={color} />
-          {commit.isMerge && <DetailRow label="Type" value="Merge commit" color={colors.fgDim} />}
+          {commit.isMerge && <DetailRow label="Type" value="Merge commit" color={theme.fgDim} />}
           <DetailRow label="Date" value={formatFullDate(commit.date)} mono />
         </div>
       </div>
@@ -101,7 +103,7 @@ export function CommitDetail({
         <div className="panel-heading standalone">Actions</div>
         {actionRows.map((row) => (
           <button className="action-item" key={row.action} onClick={() => onAction(row.action)} type="button">
-            <Icon type={row.icon} size={13} color={colors.accent} />
+            <Icon type={row.icon} size={13} color={theme.accent} />
             {row.label}
           </button>
         ))}

@@ -120,7 +120,7 @@ describe("parseRemotes", () => {
     expect(remotes).toHaveLength(2);
     expect(remotes[0].name).toBe("origin");
     expect(remotes[1].name).toBe("upstream");
-    expect(remotes[0].color).not.toBe(remotes[1].color);
+    expect(remotes[0].colorIndex).not.toBe(remotes[1].colorIndex);
   });
 
   it("handles empty remote output", () => {

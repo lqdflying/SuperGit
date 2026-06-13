@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { colors } from "../../../shared/tokens";
 import type { BranchAction, BranchInfo, RemoteBranchInfo, RemoteConfig, RemoteTracking } from "../../../shared/types";
 import { Icon, type IconName } from "../../icons";
+import { useThemeColors } from "../../ThemeProvider";
+import { branchColor, blockHeight, buildTrackingRows, remoteColor, trackingRowHeight, type TrackingRow } from "../../utils";
 import { CurrentBadge } from "../badges";
-import { blockHeight, buildTrackingRows, trackingRowHeight, type TrackingRow } from "../../utils";
 
 type TrackingStatus = "synced" | "ahead" | "behind" | "diverged" | "no-upstream" | "remote-only";
 
@@ -72,13 +72,17 @@ export function TrackingView({
   currentBranch: string;
   onBranchAction: (action: BranchAction, branchName?: string, remote?: string) => void;
 }) {
+  const theme = useThemeColors();
   const trackingRows = useMemo(() => buildTrackingRows(branches, remoteBranches), [branches, remoteBranches]);
   const localRows = useMemo(() => trackingRows.filter((row): row is Extract<TrackingRow, { kind: "local" }> => row.kind === "local"), [trackingRows]);
   const remoteOnlyRows = useMemo(
     () => trackingRows.filter((row): row is Extract<TrackingRow, { kind: "remote-only" }> => row.kind === "remote-only"),
     [trackingRows]
   );
-  const remoteColors = useMemo(() => new Map(remotes.map((remote) => [remote.name, remote.color])), [remotes]);
+  const remoteColors = useMemo(
+    () => new Map(remotes.map((remote) => [remote.name, remoteColor(remote.colorIndex, theme)])),
+    [remotes, theme]
+  );
   const detached = currentBranch.startsWith("DETACHED");
   const currentBranchLabel = detached ? currentBranch.replace(/^DETACHED\s*/, "") : currentBranch;
   const checkoutBranch = resolveCurrentBranchName(branches, currentBranch);
@@ -169,7 +173,7 @@ export function TrackingView({
       <div className="remote-legend-bar">
         {remotes.map((remote) => (
           <div className="remote-chip" key={remote.name}>
-            <span style={{ background: remote.color }} />
+            <span style={{ background: remoteColor(remote.colorIndex, theme) }} />
             <strong>{remote.name}</strong>
             <em>{remote.url}</em>
           </div>
@@ -197,7 +201,7 @@ export function TrackingView({
                     onClick={() => selectLocalBranch(branch.name)}
                     type="button"
                   >
-                    <span className="branch-dot" style={{ background: branch.color }} />
+                    <span className="branch-dot" style={{ background: branchColor(branch.colorIndex, theme) }} />
                     <strong title={branch.name}>{branch.name}</strong>
                   </button>
                   {branch.isCurrent && <CurrentBadge />}
@@ -206,13 +210,13 @@ export function TrackingView({
                   {branch.remotes.length === 0 ? (
                     <div className="tracking-track-line">
                       <svg width={48} height={2}>
-                        <line x1={0} y1={1} x2={48} y2={1} stroke={colors.untracked} strokeWidth={1.2} strokeDasharray="4,3" />
+                        <line x1={0} y1={1} x2={48} y2={1} stroke={theme.untracked} strokeWidth={1.2} strokeDasharray="4,3" />
                       </svg>
                       <span className="tracking-no-upstream">no upstream</span>
                     </div>
                   ) : (
                     branch.remotes.map((tracking) => (
-                      <TrackingTrackLine key={tracking.ref} tracking={tracking} remoteColor={remoteColors.get(tracking.remote) ?? colors.fgDim} />
+                      <TrackingTrackLine key={tracking.ref} tracking={tracking} remoteColor={remoteColors.get(tracking.remote) ?? theme.fgDim} syncedColor={theme.synced} />
                     ))
                   )}
                 </div>
@@ -230,16 +234,16 @@ export function TrackingView({
                           onClick={() => selectLocalBranch(branch.name, tracking.remote)}
                           type="button"
                         >
-                          <span className="branch-dot" style={{ background: remoteColors.get(tracking.remote) ?? colors.fgDim }} />
+                          <span className="branch-dot" style={{ background: remoteColors.get(tracking.remote) ?? theme.fgDim }} />
                           <span className="remote-row-label" title={tracking.ref}>
                             {tracking.ref}
                           </span>
                           {tracking.isConfiguredUpstream && (
-                            <span className="upstream-badge" style={{ color: remoteColors.get(tracking.remote) ?? colors.accent }}>
+                            <span className="upstream-badge" style={{ color: remoteColors.get(tracking.remote) ?? theme.accent }}>
                               upstream
                             </span>
                           )}
-                          <RemoteStatusIcons ahead={tracking.ahead} behind={tracking.behind} />
+                          <RemoteStatusIcons ahead={tracking.ahead} behind={tracking.behind} syncedColor={theme.synced} />
                         </button>
                       );
                     })
@@ -255,7 +259,7 @@ export function TrackingView({
               selectedRemoteOnly &&
               remoteBranch.branchName === selectedBranchName &&
               remoteBranch.remote === selectedRemote;
-            const remoteColor = remoteColors.get(remoteBranch.remote) ?? remoteBranch.color;
+            const remoteColorValue = remoteColors.get(remoteBranch.remote) ?? remoteColor(remoteBranch.colorIndex, theme);
             return (
               <div className="tracking-table-row remote-only-row" key={`remote-only-${remoteBranch.ref}`} style={{ minHeight: trackingRowHeight(row) }}>
                 <div className="tracking-cell-local">
@@ -270,8 +274,8 @@ export function TrackingView({
                 <div className="tracking-cell-tracks">
                   <div className="tracking-track-line">
                     <svg width={36} height={12}>
-                      <line x1={0} y1={6} x2={28} y2={6} stroke={remoteColor} strokeWidth={1.5} strokeDasharray="4,3" opacity={0.6} />
-                      <polygon points="31,6 26,3 26,9" fill={remoteColor} opacity={0.7} />
+                      <line x1={0} y1={6} x2={28} y2={6} stroke={remoteColorValue} strokeWidth={1.5} strokeDasharray="4,3" opacity={0.6} />
+                      <polygon points="31,6 26,3 26,9" fill={remoteColorValue} opacity={0.7} />
                     </svg>
                     <span className="tracking-no-upstream">remote</span>
                   </div>
@@ -282,11 +286,11 @@ export function TrackingView({
                     onClick={() => selectRemoteOnlyBranch(remoteBranch)}
                     type="button"
                   >
-                    <span className="branch-dot" style={{ background: remoteColor }} />
+                    <span className="branch-dot" style={{ background: remoteColorValue }} />
                     <span className="remote-row-label" title={remoteBranch.ref}>
                       {remoteBranch.ref}
                     </span>
-                    <span className="upstream-badge" style={{ color: remoteColor }}>remote</span>
+                    <span className="upstream-badge" style={{ color: remoteColorValue }}>remote</span>
                   </button>
                 </div>
               </div>
@@ -297,12 +301,12 @@ export function TrackingView({
       </div>
       <div className="tracking-footer">
         <div className="legend-row">
-          <LegendItem color={colors.ahead} label="+N ahead" dot />
-          <LegendItem color={colors.behind} label="-N behind" dot />
-          <LegendItem color={colors.synced} label="synced" dot />
-          <LegendItem color={colors.untracked} label="untracked" dot />
+          <LegendItem color={theme.ahead} label="+N ahead" dot />
+          <LegendItem color={theme.behind} label="-N behind" dot />
+          <LegendItem color={theme.synced} label="synced" dot />
+          <LegendItem color={theme.untracked} label="untracked" dot />
           {remotes.map((remote) => (
-            <LegendItem key={remote.name} color={remote.color} label={remote.name} dot />
+            <LegendItem key={remote.name} color={remoteColor(remote.colorIndex, theme)} label={remote.name} dot />
           ))}
         </div>
       </div>
@@ -355,17 +359,17 @@ export function TrackingView({
   );
 }
 
-function TrackingTrackLine({ tracking, remoteColor }: { tracking: RemoteTracking; remoteColor: string }) {
+function TrackingTrackLine({ tracking, remoteColor: lineColor, syncedColor }: { tracking: RemoteTracking; remoteColor: string; syncedColor: string }) {
   return (
     <div className="tracking-track-line">
       {tracking.ahead > 0 && <span className="track-count ahead">+{tracking.ahead}</span>}
       <svg width={36} height={12}>
-        <line x1={0} y1={6} x2={28} y2={6} stroke={remoteColor} strokeWidth={1.5} opacity={0.6} />
-        <polygon points="31,6 26,3 26,9" fill={remoteColor} opacity={0.7} />
+        <line x1={0} y1={6} x2={28} y2={6} stroke={lineColor} strokeWidth={1.5} opacity={0.6} />
+        <polygon points="31,6 26,3 26,9" fill={lineColor} opacity={0.7} />
       </svg>
       {tracking.ahead === 0 && tracking.behind === 0 && (
         <svg width={14} height={14} viewBox="0 0 16 16">
-          <polyline points="4,8.5 7,11 12,5" fill="none" stroke={colors.synced} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <polyline points="4,8.5 7,11 12,5" fill="none" stroke={syncedColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}
       {tracking.behind > 0 && <span className="track-count behind">-{tracking.behind}</span>}
@@ -373,11 +377,11 @@ function TrackingTrackLine({ tracking, remoteColor }: { tracking: RemoteTracking
   );
 }
 
-function RemoteStatusIcons({ ahead, behind }: { ahead: number; behind: number }) {
+function RemoteStatusIcons({ ahead, behind, syncedColor }: { ahead: number; behind: number; syncedColor: string }) {
   if (ahead === 0 && behind === 0) {
     return (
       <svg width={14} height={14} viewBox="0 0 16 16" className="remote-sync-icon">
-        <polyline points="4,8.5 7,11 12,5" fill="none" stroke={colors.synced} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <polyline points="4,8.5 7,11 12,5" fill="none" stroke={syncedColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
@@ -425,18 +429,19 @@ function SelectionStatus({
   trackingRef?: string;
   remoteOnly?: boolean;
 }) {
+  const theme = useThemeColors();
   const statusColor =
     status === "synced"
-      ? colors.synced
+      ? theme.synced
       : status === "ahead"
-        ? colors.ahead
+        ? theme.ahead
         : status === "behind"
-          ? colors.behind
+          ? theme.behind
           : status === "diverged"
-            ? colors.behind
+            ? theme.behind
             : status === "remote-only"
-              ? colors.synced
-              : colors.untracked;
+              ? theme.synced
+              : theme.untracked;
 
   const statusIcon: IconName =
     status === "synced"
@@ -532,9 +537,10 @@ function QuickButton({
   primary?: boolean;
   onClick: () => void;
 }) {
+  const theme = useThemeColors();
   return (
     <button className={`quick-button${primary && !disabled ? " primary" : ""}`} disabled={disabled} onClick={onClick} type="button">
-      <Icon type={icon} size={13} color={primary && !disabled ? "#ffffff" : colors.accent} />
+      <Icon type={icon} size={13} color={primary && !disabled ? theme.buttonFg : theme.accent} />
       {label}
     </button>
   );

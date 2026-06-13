@@ -72,9 +72,9 @@ When a branch is selected, derive status from the chosen tracking ref (upstream 
   - `.tracking-arrows`: `170px`
   - `.tracking-remotes`: `272px`
 - `.tracking-diagram` should stay `width: fit-content`.
-- Pills and remote rows need explicit dark backgrounds and `width: 100%`; the global webview `button { background: transparent }` reset will otherwise make them look like white VS Code buttons.
+- Pills and remote rows need explicit themed backgrounds (`var(--sg-bg3)`) and `width: 100%`; the global webview `button { background: transparent }` reset will otherwise make them look like unthemed VS Code buttons.
 - Keep colored dots in `.branch-dot`; put `current` / `upstream` tiny-pills **inside** the pill/row, not floating outside truncated text.
-- Set `color-scheme: dark` on the webview root.
+- **Theme:** webview uses `--sg-*` CSS aliases mapped to `--vscode-*` variables in `media/styles.css`. React SVG/inline colors use `ThemeProvider` + `readThemeColors()`. Branch/remote data carries `colorIndex`, resolved in the webview at render time.
 
 ## Git Action Lessons
 
@@ -118,7 +118,7 @@ Fine-tuning notes for commit graph/detail work in the same session:
 - Keep commit table metadata on one line: widen AUTHOR/DATE/HASH columns and use `white-space: nowrap`.
 - `formatShortDate` in `src/webview/utils.ts` should render `MM/DD HH:mm` (24h).
 - Commit list dates in the graph table use `formatRelativeTime()` (`5m ago`, `2h ago`, …).
-- Visual tokens live in `src/shared/tokens.ts` (GitHub-dark palette, 8 lane colors); graph density: `laneWidth` 24, `rowHeight` 34, `visibleLanes` 8.
+- Visual tokens: `media/styles.css` `--sg-*` aliases (VS Code theme + fallbacks); `src/shared/tokens.ts` fallback palette for extension host/tests; `src/webview/theme.ts` reads live CSS vars; graph density: `laneWidth` 22, `rowHeight` 32, `maxLanes` 5.
 - `GraphCanvas` uses bezier edges with SVG glow filters; merge nodes = ring + inner dot; HEAD = dashed outer ring.
 - Shared UI: `Avatar.tsx`, `badges.tsx` (`RefBadge`, `TagBadge`, `HeadBadge`).
 
@@ -378,7 +378,8 @@ Pull completed but Branch Tracking counts unchanged:
 Branch tracking buttons look white or unthemed:
 
 - Check whether the element is covered by the global transparent `button` reset in `media/styles.css`.
-- Ensure `.local-branch-pill`, `.remote-row`, `.quick-button`, `.branch-list-item`, and `.file-change-item` have explicit dark-theme backgrounds.
+- Ensure `.tracking-branch-pill`, `.tracking-remote-pill`, `.quick-button`, `.branch-list-item`, and `.file-change-item` have explicit backgrounds using `var(--sg-bg3)` or similar.
+- If colors stay GitHub-dark after switching VS Code theme, confirm `--sg-*` aliases exist and `ThemeProvider` is mounted in `main.tsx`.
 
 ## Install And Packaging Lessons
 

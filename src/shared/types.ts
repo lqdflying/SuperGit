@@ -20,7 +20,7 @@ export type HistoryScope =
 
 export interface BranchInfo {
   name: string;
-  color: string;
+  colorIndex: number;
   isCurrent: boolean;
   remotes: RemoteTracking[];
 }
@@ -37,14 +37,14 @@ export interface RemoteBranchInfo {
   remote: string;
   branchName: string;
   ref: string;
-  color: string;
+  colorIndex: number;
   localBranchName?: string;
 }
 
 export interface RemoteConfig {
   name: string;
   url: string;
-  color: string;
+  colorIndex: number;
 }
 
 export interface DateRange {
@@ -127,7 +127,8 @@ export type ExtHostMessage =
   | { type: "loading"; loading: boolean; scope?: "all" | "commits" | "branches" | "remotes" | "commit-details" | "action" }
   | { type: "error"; message: string }
   | { type: "action-result"; success: boolean; message: string }
-  | { type: "repo-changed" };
+  | { type: "repo-changed" }
+  | { type: "theme-changed" };
 
 export const DEFAULT_DATE_RANGE: DateRange = {
   mode: "preset",

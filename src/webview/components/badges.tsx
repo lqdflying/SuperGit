@@ -1,4 +1,5 @@
-import { colors } from "../../shared/tokens";
+import type { ThemeColors } from "../../shared/themeColors";
+import { useThemeColors } from "../ThemeProvider";
 import { Icon } from "../icons";
 
 export function RefBadge({ text, color }: { text: string; color: string }) {
@@ -10,9 +11,10 @@ export function RefBadge({ text, color }: { text: string; color: string }) {
 }
 
 export function TagBadge({ text }: { text: string }) {
+  const theme = useThemeColors();
   return (
     <span className="tag-pill">
-      <Icon type="tag" size={10} color={colors.tagFg} />
+      <Icon type="tag" size={10} color={theme.tagFg} />
       {text}
     </span>
   );
@@ -26,12 +28,12 @@ export function CurrentBadge() {
   return <span className="current-badge">current</span>;
 }
 
-export function refBadgeColor(ref: string, laneColor: string): string {
+export function refBadgeColor(ref: string, laneColor: string, theme: ThemeColors): string {
   if (ref === "HEAD") {
     return laneColor;
   }
   if (ref.includes("/")) {
-    return colors.fgDim;
+    return theme.fgDim;
   }
   return laneColor;
 }

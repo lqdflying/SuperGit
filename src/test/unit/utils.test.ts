@@ -5,11 +5,11 @@ import type { BranchInfo, RemoteBranchInfo } from "../../shared/types";
 describe("buildTrackingRows", () => {
   it("appends remote-only branches after local branches", () => {
     const branches: BranchInfo[] = [
-      { name: "main", color: "#58a6ff", isCurrent: true, remotes: [] }
+      { name: "main", colorIndex: 1, isCurrent: true, remotes: [] }
     ];
     const remoteBranches: RemoteBranchInfo[] = [
-      { remote: "origin", branchName: "main", ref: "origin/main", color: "#58a6ff", localBranchName: "main" },
-      { remote: "origin", branchName: "feature/x", ref: "origin/feature/x", color: "#d2a8ff" }
+      { remote: "origin", branchName: "main", ref: "origin/main", colorIndex: 0, localBranchName: "main" },
+      { remote: "origin", branchName: "feature/x", ref: "origin/feature/x", colorIndex: 1 }
     ];
 
     const rows = buildTrackingRows(branches, remoteBranches);

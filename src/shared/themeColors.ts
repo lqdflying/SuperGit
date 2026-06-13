@@ -1,0 +1,31 @@
+export interface ThemeColors {
+  bg0: string;
+  bg1: string;
+  bg2: string;
+  bg3: string;
+  bg4: string;
+  border: string;
+  borderSubtle: string;
+  fg: string;
+  fgDim: string;
+  fgMuted: string;
+  fgBright: string;
+  accent: string;
+  accentHover: string;
+  branch: string[];
+  remote: string[];
+  ahead: string;
+  behind: string;
+  upToDate: string;
+  synced: string;
+  untracked: string;
+  trackArrow: string;
+  selection: string;
+  hover: string;
+  tagBg: string;
+  tagBorder: string;
+  tagFg: string;
+  currentBadge: string;
+  currentBadgeBg: string;
+  buttonFg: string;
+}

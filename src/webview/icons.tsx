@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactElement } from "react";
-import { colors } from "../shared/tokens";
+import { useThemeColors } from "./ThemeProvider";
 
 export type IconName =
   | "branch"
@@ -31,13 +31,15 @@ interface IconProps {
   style?: CSSProperties;
 }
 
-export function Icon({ type, size = 14, color = colors.fgDim, style }: IconProps): ReactElement {
+export function Icon({ type, size = 14, color, style }: IconProps): ReactElement {
+  const theme = useThemeColors();
+  const strokeColor = color ?? theme.fgDim;
   const p = {
     width: size,
     height: size,
     viewBox: "0 0 16 16",
     fill: "none",
-    stroke: color,
+    stroke: strokeColor,
     strokeWidth: 1.5,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
@@ -64,7 +66,7 @@ export function Icon({ type, size = 14, color = colors.fgDim, style }: IconProps
     tag: (
       <>
         <path d="M2 8.5V3.5a1 1 0 011-1h5l5.5 5.5a1 1 0 010 1.41L9.41 13.5a1 1 0 01-1.41 0L2 8.5z" />
-        <circle cx="5.5" cy="5.5" r="1" fill={color} />
+        <circle cx="5.5" cy="5.5" r="1" fill={strokeColor} />
       </>
     ),
     merge: (

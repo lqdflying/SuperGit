@@ -3,32 +3,111 @@
 }
 
 :root {
-  --bg0: #0d1117;
-  --bg1: #161b22;
-  --bg2: #1c2129;
-  --bg3: #21262d;
-  --bg4: #292e36;
-  --border: #30363d;
-  --border-subtle: #21262d;
-  --fg: #c9d1d9;
-  --fg-dim: #6e7681;
-  --fg-muted: #484f58;
-  --fg-bright: #e6edf3;
-  --accent: #2f81f7;
-  --accent-hover: #1f6feb;
-  --selection: rgba(47, 129, 247, 0.10);
-  --hover: rgba(136, 198, 255, 0.04);
-  --tag-bg: rgba(210, 168, 255, 0.10);
-  --tag-fg: #d2a8ff;
-  --tag-border: rgba(210, 168, 255, 0.25);
-  --ahead: #56d364;
-  --behind: #f85149;
-  --synced: #58a6ff;
-  --untracked: #484f58;
+  /* SuperGit semantic tokens → VS Code theme (GitHub-dark fallbacks) */
+  --sg-bg0: var(--vscode-editor-background, #0d1117);
+  --sg-bg1: var(--vscode-sideBar-background, #161b22);
+  --sg-bg2: var(--vscode-panel-background, #1c2129);
+  --sg-bg3: var(--vscode-input-background, #21262d);
+  --sg-bg4: var(--vscode-editorWidget-background, #292e36);
+  --sg-border: var(--vscode-panel-border, #30363d);
+  --sg-border-subtle: var(--vscode-widget-border, #21262d);
+  --sg-fg: var(--vscode-editor-foreground, #c9d1d9);
+  --sg-fg-dim: var(--vscode-descriptionForeground, #6e7681);
+  --sg-fg-muted: var(--vscode-disabledForeground, #484f58);
+  --sg-fg-bright: var(--vscode-foreground, #e6edf3);
+  --sg-accent: var(--vscode-focusBorder, #2f81f7);
+  --sg-accent-hover: var(--vscode-button-hoverBackground, #1f6feb);
+  --sg-selection: var(--vscode-list-activeSelectionBackground, rgba(47, 129, 247, 0.10));
+  --sg-selection-fg: var(--vscode-list-activeSelectionForeground, var(--vscode-foreground, #e6edf3));
+  --sg-hover: var(--vscode-list-hoverBackground, rgba(136, 198, 255, 0.04));
+  --sg-pill-border: color-mix(in srgb, var(--sg-fg) 22%, var(--sg-border));
+  --sg-tag-bg: var(--vscode-badge-background, rgba(210, 168, 255, 0.10));
+  --sg-tag-fg: var(--vscode-badge-foreground, #d2a8ff);
+  --sg-tag-border: rgba(210, 168, 255, 0.25);
+  --sg-ahead: var(--vscode-gitDecoration-addedResourceForeground, #56d364);
+  --sg-behind: var(--vscode-gitDecoration-deletedResourceForeground, #f85149);
+  --sg-synced: var(--vscode-gitDecoration-modifiedResourceForeground, #58a6ff);
+  --sg-untracked: var(--vscode-disabledForeground, #484f58);
+  --sg-button-fg: var(--vscode-button-foreground, #ffffff);
+  --sg-current-badge: var(--vscode-errorForeground, #f85149);
+  --sg-current-badge-bg: var(--vscode-inputValidation-errorBackground, rgba(248, 81, 73, 0.13));
+
+  /* Branch lane palette (dark default) */
+  --sg-branch-0: #f78166;
+  --sg-branch-1: #58a6ff;
+  --sg-branch-2: #7ee787;
+  --sg-branch-3: #d2a8ff;
+  --sg-branch-4: #ffa657;
+  --sg-branch-5: #79c0ff;
+  --sg-branch-6: #f778ba;
+  --sg-branch-7: #a5d6ff;
+
+  /* Remote color pool */
+  --sg-remote-0: #58a6ff;
+  --sg-remote-1: #d2a8ff;
+  --sg-remote-2: #7ee787;
+  --sg-remote-3: #ffa657;
+
+  /* Legacy aliases (used throughout styles.css) */
+  --bg0: var(--sg-bg0);
+  --bg1: var(--sg-bg1);
+  --bg2: var(--sg-bg2);
+  --bg3: var(--sg-bg3);
+  --bg4: var(--sg-bg4);
+  --border: var(--sg-border);
+  --border-subtle: var(--sg-border-subtle);
+  --fg: var(--sg-fg);
+  --fg-dim: var(--sg-fg-dim);
+  --fg-muted: var(--sg-fg-muted);
+  --fg-bright: var(--sg-fg-bright);
+  --accent: var(--sg-accent);
+  --accent-hover: var(--sg-accent-hover);
+  --selection: var(--sg-selection);
+  --selection-fg: var(--sg-selection-fg);
+  --pill-border: var(--sg-pill-border);
+  --hover: var(--sg-hover);
+  --tag-bg: var(--sg-tag-bg);
+  --tag-fg: var(--sg-tag-fg);
+  --tag-border: var(--sg-tag-border);
+  --ahead: var(--sg-ahead);
+  --behind: var(--sg-behind);
+  --synced: var(--sg-synced);
+  --untracked: var(--sg-untracked);
   --graph-column-width: 122px;
   --graph-row-height: 32px;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-mono: "SF Mono", "Fira Code", "JetBrains Mono", Consolas, monospace;
+  --font-sans: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif);
+  --font-mono: var(--vscode-editor-font-family, "SF Mono", "Fira Code", "JetBrains Mono", Consolas, monospace);
+}
+
+body.vscode-light {
+  --sg-branch-0: #cf222e;
+  --sg-branch-1: #0969da;
+  --sg-branch-2: #1a7f37;
+  --sg-branch-3: #8250df;
+  --sg-branch-4: #bc4c00;
+  --sg-branch-5: #0550ae;
+  --sg-branch-6: #bf3989;
+  --sg-branch-7: #218bff;
+  --sg-remote-0: #0969da;
+  --sg-remote-1: #8250df;
+  --sg-remote-2: #1a7f37;
+  --sg-remote-3: #bc4c00;
+  --sg-tag-border: rgba(130, 80, 223, 0.35);
+}
+
+body.vscode-high-contrast {
+  --sg-branch-0: #ff7b72;
+  --sg-branch-1: #79c0ff;
+  --sg-branch-2: #7ee787;
+  --sg-branch-3: #d2a8ff;
+  --sg-branch-4: #ffa657;
+  --sg-branch-5: #a5d6ff;
+  --sg-branch-6: #ff9bce;
+  --sg-branch-7: #cae8ff;
+  --sg-remote-0: #79c0ff;
+  --sg-remote-1: #d2a8ff;
+  --sg-remote-2: #7ee787;
+  --sg-remote-3: #ffa657;
 }
 
 html,
@@ -72,7 +151,6 @@ body {
 button,
 input {
   font: inherit;
-  color-scheme: dark;
 }
 
 button {
@@ -359,10 +437,11 @@ button {
 
 .branch-list-item.selected {
   background: var(--selection);
+  color: var(--selection-fg);
 }
 
 .branch-list-item.selected .branch-name {
-  color: var(--fg-bright);
+  color: var(--selection-fg);
 }
 
 .branch-list-item:hover {
@@ -451,7 +530,6 @@ button {
 .date-input {
   padding: 2px 6px;
   font-size: 11px;
-  color-scheme: dark;
   background: var(--bg3);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -637,8 +715,8 @@ button {
   font-size: 9px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(248, 81, 73, 0.13);
-  color: #f85149;
+  background: var(--sg-current-badge-bg);
+  color: var(--sg-current-badge);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -967,7 +1045,7 @@ button {
   padding: 4px 12px;
   border-radius: 8px;
   background: var(--bg2);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--pill-border);
 }
 
 .remote-chip span,
@@ -1077,13 +1155,19 @@ button {
   padding: 5px 12px;
   border-radius: 8px;
   background: var(--bg3);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--pill-border);
   max-width: 200px;
   width: 100%;
   box-sizing: border-box;
   cursor: pointer;
   text-align: left;
   overflow: hidden;
+  color: var(--fg-bright);
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.tracking-branch-pill:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--pill-border));
 }
 
 .tracking-branch-pill strong {
@@ -1094,26 +1178,37 @@ button {
   white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
-  color: var(--fg-bright);
+  color: inherit;
   font-family: var(--font-mono);
 }
 
 .tracking-branch-pill.selected {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
   background: var(--selection);
+  border-color: var(--accent);
+  color: var(--selection-fg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.tracking-branch-pill.selected strong {
+  color: var(--selection-fg);
 }
 
 .tracking-branch-pill.remote-only-local {
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--pill-border);
   background: var(--bg2);
   max-width: 180px;
+  color: var(--fg-dim);
+}
+
+.tracking-branch-pill.remote-only-local.selected {
+  color: var(--selection-fg);
 }
 
 .tracking-branch-pill.remote-only-local .remote-only-copy {
   font-size: 10px;
   font-style: italic;
-  color: var(--fg-muted);
+  color: inherit;
+  opacity: 0.85;
 }
 
 .tracking-remote-pill {
@@ -1125,17 +1220,28 @@ button {
   padding: 4px 10px;
   border-radius: 8px;
   background: var(--bg3);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--pill-border);
   cursor: pointer;
   text-align: left;
   overflow: hidden;
   box-sizing: border-box;
+  color: var(--fg-dim);
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.tracking-remote-pill:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--pill-border));
 }
 
 .tracking-remote-pill.selected {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
   background: var(--selection);
+  border-color: var(--accent);
+  color: var(--selection-fg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.tracking-remote-pill.selected .remote-row-label {
+  color: var(--selection-fg);
 }
 
 .tracking-remote-pill .branch-dot {

@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.0 - 2026-06-13
+
+### Added
+
+- v4 webview layout: denser commit graph (5 lanes, S-curves, Graph + Description columns), row-based branch tracking table, sidebar color dots and red current badge.
+- VS Code theme adaptation: `--sg-*` CSS aliases mapped to `--vscode-*` variables, `ThemeProvider` for SVG/inline colors, `colorIndex` on branch/remote models, live refresh on theme change.
+- Remote-only branches in Branch Tracking with Create Local Branch action.
+
+### Changed
+
+- Main/master lane reserved on lane 0; side lanes cycle 1–4.
+- Design spec, AGENTS.md, and webview rules updated for hybrid theming (replaces hardcoded GitHub-dark-only guidance).
+
+### Fixed
+
+- Branch tracking pill borders and selected-state text contrast on themes such as Monokai Pro and Material Theme Kit (`--vscode-list-activeSelectionForeground`).
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (68 tests)
+- `npm run build`
+- `npm run package`
+
 ## 1.0.1 - 2026-06-13
 
 ### Added

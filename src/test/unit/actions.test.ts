@@ -97,7 +97,7 @@ describe("executeBranchAction", () => {
     showWarningMessageMock.mockResolvedValue("Run");
     showInputBoxMock.mockResolvedValue("origin/main");
     getCurrentBranchMock.mockResolvedValue("main");
-    getRemotesMock.mockResolvedValue([{ name: "origin", url: "url", color: "#fff" }]);
+    getRemotesMock.mockResolvedValue([{ name: "origin", url: "url", colorIndex: 0 }]);
     runGitMock.mockResolvedValue(ok(""));
   });
 
@@ -148,10 +148,10 @@ describe("executeBranchAction", () => {
 
   it("prompts for remote when multiple remotes exist", async () => {
     getRemotesMock.mockResolvedValue([
-      { name: "origin", url: "origin-url", color: "#fff" },
-      { name: "upstream", url: "upstream-url", color: "#000" }
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
     ]);
-    showQuickPickMock.mockResolvedValue({ label: "upstream", description: "upstream-url", remote: { name: "upstream", url: "upstream-url", color: "#000" } });
+    showQuickPickMock.mockResolvedValue({ label: "upstream", description: "upstream-url", remote: { name: "upstream", url: "upstream-url", colorIndex: 1 } });
 
     await executeBranchAction("/repo", "push", "main");
     expect(showQuickPickMock).toHaveBeenCalled();
@@ -160,8 +160,8 @@ describe("executeBranchAction", () => {
 
   it("offers all remotes for fetch when multiple remotes exist", async () => {
     getRemotesMock.mockResolvedValue([
-      { name: "origin", url: "origin-url", color: "#fff" },
-      { name: "upstream", url: "upstream-url", color: "#000" }
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
     ]);
     showQuickPickMock.mockResolvedValue({ label: "All remotes", description: "Run against every configured remote" });
 
@@ -172,8 +172,8 @@ describe("executeBranchAction", () => {
 
   it("skips remote quick pick when remote is explicit", async () => {
     getRemotesMock.mockResolvedValue([
-      { name: "origin", url: "origin-url", color: "#fff" },
-      { name: "upstream", url: "upstream-url", color: "#000" }
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
     ]);
 
     await executeBranchAction("/repo", "pull", "main", "origin");
@@ -189,8 +189,8 @@ describe("executeBranchAction", () => {
 
   it("cancels push when remote quick pick is dismissed", async () => {
     getRemotesMock.mockResolvedValue([
-      { name: "origin", url: "origin-url", color: "#fff" },
-      { name: "upstream", url: "upstream-url", color: "#000" }
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
     ]);
     showQuickPickMock.mockResolvedValue(undefined);
 

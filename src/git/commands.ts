@@ -105,7 +105,7 @@ export async function getBranches(cwd: string): Promise<BranchInfo[]> {
 
       return {
         name: branch.name,
-        color: colors.branch[index % colors.branch.length],
+        colorIndex: index % colors.branch.length,
         isCurrent: branch.name === currentBranch,
         remotes: tracking
       };
@@ -137,7 +137,7 @@ export async function getRemoteBranches(cwd: string): Promise<RemoteBranchInfo[]
           remote: fallbackRemote,
           branchName,
           ref,
-          color: remoteByName.get(fallbackRemote)?.color ?? colors.remoteColorPool[0],
+          colorIndex: remoteByName.get(fallbackRemote)?.colorIndex ?? 0,
           localBranchName: localBranches.has(branchName) ? branchName : undefined
         }
       ];
@@ -149,7 +149,7 @@ export async function getRemoteBranches(cwd: string): Promise<RemoteBranchInfo[]
         remote: remote.name,
         branchName,
         ref,
-        color: remote.color,
+        colorIndex: remote.colorIndex,
         localBranchName: localBranches.has(branchName) ? branchName : undefined
       }
     ];

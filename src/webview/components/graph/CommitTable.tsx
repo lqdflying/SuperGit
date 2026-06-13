@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { colors, graph } from "../../../shared/tokens";
+import { graph } from "../../../shared/tokens";
 import type { CommitNode } from "../../../shared/types";
-import { RefBadge, TagBadge, refBadgeColor } from "../badges";
+import { useThemeColors } from "../../ThemeProvider";
 import { branchColor } from "../../utils";
+import { RefBadge, TagBadge, refBadgeColor } from "../badges";
 
 type GraphEdge = {
   kind: "edge";
@@ -56,6 +57,7 @@ export function CommitTable({ commits, selectedHash, onSelect }: { commits: Comm
 }
 
 function CommitRows({ commits, selectedHash, onSelect }: { commits: CommitNode[]; selectedHash: string; onSelect: (hash: string) => void }) {
+  const theme = useThemeColors();
   const [hoverHash, setHoverHash] = useState<string | null>(null);
 
   return (
@@ -63,7 +65,7 @@ function CommitRows({ commits, selectedHash, onSelect }: { commits: CommitNode[]
       {commits.map((commit) => {
         const selected = commit.hash === selectedHash;
         const hovered = hoverHash === commit.hash;
-        const color = branchColor(commit.branchIndex);
+        const color = branchColor(commit.branchIndex, theme);
         const displayRefs = commit.refs.filter((ref) => ref !== "HEAD");
         return (
           <button
@@ -74,13 +76,13 @@ function CommitRows({ commits, selectedHash, onSelect }: { commits: CommitNode[]
             onMouseLeave={() => setHoverHash(null)}
             style={{
               borderLeftColor: selected ? color : "transparent",
-              background: selected ? colors.selection : hovered ? colors.hover : undefined
+              background: selected ? theme.selection : hovered ? theme.hover : undefined
             }}
             type="button"
           >
             <div className="commit-message">
               {displayRefs.map((ref) => (
-                <RefBadge key={ref} text={ref} color={refBadgeColor(ref, color)} />
+                <RefBadge key={ref} text={ref} color={refBadgeColor(ref, color, theme)} />
               ))}
               {commit.tags.map((tag) => (
                 <TagBadge key={tag} text={tag} />
@@ -96,6 +98,7 @@ function CommitRows({ commits, selectedHash, onSelect }: { commits: CommitNode[]
 }
 
 function GraphCanvas({ commits, selectedHash, onSelect }: { commits: CommitNode[]; selectedHash: string; onSelect: (hash: string) => void }) {
+  const theme = useThemeColors();
   const width = graph.maxLanes * graph.laneWidth + 14;
   const height = commits.length * graph.rowHeight + 12;
   const laneX = (index: number) => index * graph.laneWidth + graph.laneWidth / 2 + 7;
@@ -108,7 +111,7 @@ function GraphCanvas({ commits, selectedHash, onSelect }: { commits: CommitNode[
       commit.parents.forEach((parent, parentIndex) => {
         const parentRow = indexMap.get(parent);
         const laneIndex = (commit.branchIndex + parentIndex) % graph.maxLanes;
-        const color = branchColor(laneIndex);
+        const color = branchColor(laneIndex, theme);
         if (parentRow !== undefined) {
           items.push({
             kind: "edge",
@@ -131,14 +134,14 @@ function GraphCanvas({ commits, selectedHash, onSelect }: { commits: CommitNode[
       });
     });
     return items;
-  }, [commits, indexMap]);
+  }, [commits, indexMap, theme]);
 
   const edgeShapes = shapes.filter((shape): shape is GraphEdge => shape.kind === "edge");
 
   return (
     <svg width={width} height={height} className="graph-svg">
       <defs>
-        {colors.branch.map((_, index) => (
+        {theme.branch.map((_, index) => (
           <filter key={`glow-${index}`} id={`glow-${index}`} x="-40%" y="-40%" width="180%" height="180%">
             <feGaussianBlur stdDeviation="1.8" result="blur" />
             <feMerge>
@@ -149,7 +152,16 @@ function GraphCanvas({ commits, selectedHash, onSelect }: { commits: CommitNode[
         ))}
       </defs>
       {Array.from({ length: graph.maxLanes }).map((_, index) => (
-        <line key={`lane-${index}`} x1={laneX(index)} y1={0} x2={laneX(index)} y2={height} stroke={branchColor(index)} strokeWidth={0.5} opacity={0.06} />
+        <line
+          key={`lane-${index}`}
+          x1={laneX(index)}
+          y1={0}
+          x2={laneX(index)}
+          y2={height}
+          stroke={branchColor(index, theme)}
+          strokeWidth={0.5}
+          opacity={0.06}
+        />
       ))}
       {[...edgeShapes].reverse().map((shape, index) => {
         const x1 = laneX(shape.fromLane);
@@ -157,7 +169,7 @@ function GraphCanvas({ commits, selectedHash, onSelect }: { commits: CommitNode[
         const x2 = laneX(shape.toLane);
         const y2 = rowY(shape.toRow);
         const crossLane = shape.fromLane !== shape.toLane;
-        const filterIndex = shape.branchIndex % colors.branch.length;
+        const filterIndex = shape.branchIndex % theme.branch.length;
         return (
           <path
             key={`edge-${index}`}
@@ -195,7 +207,7 @@ function GraphCanvas({ commits, selectedHash, onSelect }: { commits: CommitNode[
       {commits.map((commit, index) => {
         const cx = laneX(commit.branchIndex);
         const cy = rowY(index);
-        const color = branchColor(commit.branchIndex);
+        const color = branchColor(commit.branchIndex, theme);
         const selected = commit.hash === selectedHash;
         const filled = hasLocalRef(commit.refs);
         return (
@@ -207,7 +219,7 @@ function GraphCanvas({ commits, selectedHash, onSelect }: { commits: CommitNode[
                 <circle cx={cx} cy={cy} r={graph.nodeRadius - 1.5} fill={color} opacity={0.85} />
               </g>
             ) : (
-              <circle cx={cx} cy={cy} r={graph.nodeRadius} fill={filled ? color : colors.bg0} stroke={color} strokeWidth={2} />
+              <circle cx={cx} cy={cy} r={graph.nodeRadius} fill={filled ? color : theme.bg0} stroke={color} strokeWidth={2} />
             )}
           </g>
         );

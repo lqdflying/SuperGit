@@ -2,7 +2,7 @@
   "name": "supergit",
   "displayName": "SuperGit",
   "description": "Visual Git commit history and branch tracking with multi-remote support",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "publisher": "lqdflying",
   "license": "MIT",
   "repository": {

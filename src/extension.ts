@@ -70,6 +70,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveColorTheme(() => {
+      if (panel) {
+        post({ type: "theme-changed" });
+      }
+    })
+  );
+
   try {
     repositoryWatcher = await onRepositoryChange(() => {
       debug("repository change event received");

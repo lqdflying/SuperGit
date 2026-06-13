@@ -1,8 +1,12 @@
-import { colors } from "../shared/tokens";
 import type { BranchInfo, RemoteBranchInfo } from "../shared/types";
+import type { ThemeColors } from "../shared/themeColors";
 
-export function branchColor(index: number): string {
-  return colors.branch[index % colors.branch.length];
+export function branchColor(index: number, theme: ThemeColors): string {
+  return theme.branch[index % theme.branch.length];
+}
+
+export function remoteColor(index: number, theme: ThemeColors): string {
+  return theme.remote[index % theme.remote.length];
 }
 
 export function blockHeight(branch: BranchInfo): number {

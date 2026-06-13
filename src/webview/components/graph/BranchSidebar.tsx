@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { colors } from "../../../shared/tokens";
 import type { BranchInfo, HistoryScope, RemoteBranchInfo } from "../../../shared/types";
+import { useThemeColors } from "../../ThemeProvider";
+import { branchColor, remoteColor } from "../../utils";
 import { CurrentBadge } from "../badges";
 
 function isScopeEqual(a: HistoryScope, b: HistoryScope): boolean {
@@ -34,6 +35,8 @@ export function BranchSidebar({
   onCollapse: (collapsed: boolean) => void;
   onScopeChange: (scope: HistoryScope) => void;
 }) {
+  const theme = useThemeColors();
+
   if (collapsed) {
     return (
       <aside className="branch-sidebar collapsed" onClick={() => onCollapse(false)}>
@@ -68,33 +71,36 @@ export function BranchSidebar({
           onClick={() => onScopeChange({ type: "all" })}
         />
 
-        {branches.map((branch) => (
-          <div key={branch.name}>
-            <ScopeRow
-              active={scope.type === "local" && scope.ref === branch.name}
-              label={branch.name}
-              color={branch.color}
-              onClick={() => onScopeChange({ type: "local", ref: branch.name, branchName: branch.name })}
-              trailing={branch.isCurrent ? <CurrentBadge /> : undefined}
-            />
-            {branch.remotes.map((tracking) => (
+        {branches.map((branch) => {
+          const color = branchColor(branch.colorIndex, theme);
+          return (
+            <div key={branch.name}>
               <ScopeRow
-                key={tracking.ref}
-                active={scope.type === "remote" && scope.ref === tracking.ref}
-                label={tracking.ref}
-                nested
-                onClick={() =>
-                  onScopeChange({
-                    type: "remote",
-                    ref: tracking.ref,
-                    remote: tracking.remote,
-                    branchName: branch.name
-                  })
-                }
+                active={scope.type === "local" && scope.ref === branch.name}
+                label={branch.name}
+                color={color}
+                onClick={() => onScopeChange({ type: "local", ref: branch.name, branchName: branch.name })}
+                trailing={branch.isCurrent ? <CurrentBadge /> : undefined}
               />
-            ))}
-          </div>
-        ))}
+              {branch.remotes.map((tracking) => (
+                <ScopeRow
+                  key={tracking.ref}
+                  active={scope.type === "remote" && scope.ref === tracking.ref}
+                  label={tracking.ref}
+                  nested
+                  onClick={() =>
+                    onScopeChange({
+                      type: "remote",
+                      ref: tracking.ref,
+                      remote: tracking.remote,
+                      branchName: branch.name
+                    })
+                  }
+                />
+              ))}
+            </div>
+          );
+        })}
 
         {remoteOnlyByRemote.size > 0 && (
           <>
@@ -109,7 +115,7 @@ export function BranchSidebar({
                     label={remoteBranch.branchName}
                     nested
                     remoteOnly
-                    color={remoteBranch.color}
+                    color={remoteColor(remoteBranch.colorIndex, theme)}
                     onClick={() =>
                       onScopeChange({
                         type: "remote",
@@ -150,16 +156,19 @@ function ScopeRow({
   trailing?: ReactNode;
   onClick: () => void;
 }) {
+  const theme = useThemeColors();
+  const dimColor = theme.fgDim;
+
   return (
     <button
       className={`branch-list-item${active ? " selected" : ""}${nested ? " nested" : ""}${header ? " header-item" : ""}${remoteOnly ? " remote-only-item" : ""}`}
       onClick={onClick}
-      style={color && !nested ? { borderLeftColor: color } : remoteOnly ? { borderLeftColor: color ?? colors.fgDim } : undefined}
+      style={color && !nested ? { borderLeftColor: color } : remoteOnly ? { borderLeftColor: color ?? dimColor } : undefined}
       type="button"
     >
       {!nested && color && <span className="branch-dot sidebar-dot" style={{ background: color }} />}
       {nested && !remoteOnly && <span className="branch-sub-dot" />}
-      {remoteOnly && <span className="branch-sub-dot remote-only-dot" style={{ background: color ?? colors.fgDim }} />}
+      {remoteOnly && <span className="branch-sub-dot remote-only-dot" style={{ background: color ?? dimColor }} />}
       <span className="branch-name">{label}</span>
       {trailing}
     </button>

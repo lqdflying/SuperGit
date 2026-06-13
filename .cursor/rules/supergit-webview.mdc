@@ -97,8 +97,7 @@ Implementation: `src/webview/components/tracking/TrackingView.tsx`
 
 ### Tracking layout CSS
 
-- Fixed widths: `.tracking-local` 228px, `.tracking-arrows` 170px, `.tracking-remotes` 272px
-- `.tracking-diagram` → `width: fit-content`
-- Pills/rows need explicit dark backgrounds; global `button { background: transparent }` makes them look white
+- Row table: `.tracking-head-local` 220px, `.tracking-head-tracks` 100px, `.tracking-head-remotes` flex
+- Pills/rows need explicit themed backgrounds (`var(--sg-bg3)`); global `button { background: transparent }` makes them look white
 - Colored dots in `.branch-dot`; `current` / `upstream` tiny-pills stay inside pills
-- Root webview: `color-scheme: dark`
+- Theme: `--sg-*` CSS vars + `ThemeProvider`; no hardcoded `color-scheme: dark`

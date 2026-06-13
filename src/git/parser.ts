@@ -62,7 +62,7 @@ export function parseRemotes(raw: string): RemoteConfig[] {
     remotes.push({
       name: match[1],
       url: match[2],
-      color: colors.remoteColorPool[remotes.length % colors.remoteColorPool.length]
+      colorIndex: remotes.length % colors.remoteColorPool.length
     });
   }
 

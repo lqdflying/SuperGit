@@ -217,10 +217,18 @@ export type ExtHostMessage =
 
 ## 3. Visual Design Tokens
 
-GitHub Dark theme palette. Do NOT use VS Code theme API for webview interior — hardcode these for visual consistency.
+Hybrid theming: UI chrome follows the active VS Code color theme via CSS variables; graph lane colors use theme-aware `--sg-branch-N` / `--sg-remote-N` palettes with light/dark/high-contrast overrides.
+
+**CSS layer** (`media/styles.css`): `--sg-*` aliases map to `--vscode-*` (e.g. `--sg-bg0` → `--vscode-editor-background`) with GitHub-dark fallbacks.
+
+**Runtime layer** (`src/webview/theme.ts`, `ThemeProvider.tsx`): `readThemeColors()` reads `--sg-*` from `getComputedStyle` for SVG/inline React styles. Refreshes on `body` class/`data-vscode-theme-id` changes and `theme-changed` postMessage from `onDidChangeActiveColorTheme`.
+
+**Data layer**: `BranchInfo`, `RemoteConfig`, and `RemoteBranchInfo` use `colorIndex` (not hex); webview resolves via `branchColor(index, theme)` / `remoteColor(index, theme)`.
+
+**Extension host fallbacks** (`src/shared/tokens.ts`):
 
 ```typescript
-// ── tokens.ts ──
+// ── tokens.ts (fallbacks for non-webview code + CSS var defaults) ──
 
 export const colors = {
   bg0: "#0d1117",       // Canvas background
