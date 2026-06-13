@@ -10,7 +10,7 @@ Apply **only** when the user explicitly asks for GA, release, publish prep, or a
 
 ## Versioning (semver)
 
-Use `MAJOR.MINOR.PATCH` (e.g. `1.0.0`):
+Use `MAJOR.MINOR.PATCH` from `package.json` (format `X.Y.Z`):
 
 | Bump | When | Examples |
 |------|------|----------|
@@ -19,18 +19,18 @@ Use `MAJOR.MINOR.PATCH` (e.g. `1.0.0`):
 | **PATCH** (1.0.`Z`) | Backward-compatible bug fixes and polish | Pull refresh fix, styling, logging, docs |
 
 - Do **not** bump MAJOR for new features alone.
-- Pre-GA test builds may stay on the same version; GA milestones use explicit version bumps (e.g. first GA → `1.0.0`).
+- Pre-GA test builds may stay on the same version; GA milestones use explicit version bumps in `package.json` / `CHANGELOG.md`.
+- **Do not hardcode version literals in `AGENTS.md` or `.cursor/rules/`.** Tags, VSIX names, and docs should derive from `package.json` → `"version"` and git tag `v<version>`.
 
 ## Checklist
 
 1. Bump `package.json` and `package-lock.json`
 2. Add dated `CHANGELOG.md` entry with explicit release notes
 3. Run full verify: `typecheck` → `test:coverage` → `build` → `package`
-4. Inspect VSIX: `unzip -l supergit-*.vsix`
+4. Inspect VSIX: `unzip -l supergit-*.vsix` (or use version from `package.json`)
 5. Commit release changes (when user asks to commit)
-6. Push, tag `vX.Y.Z`, create GitHub release with VSIX asset
+6. Push, tag `v<version>` matching `package.json`, create GitHub release with `supergit-<version>.vsix` asset
 7. Verify asset uploaded
-8. Update `AGENTS.md` / build-verify rule VSIX path if the version changed
 
 ## Policies
 

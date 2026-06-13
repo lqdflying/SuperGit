@@ -380,10 +380,20 @@ npm run package
 
 For normal test VSIX builds, keep the current package version unless the user explicitly asks for a GA/release/version bump. Same-version test builds are acceptable, but stale installs are common; tell the user to uninstall/reload/reinstall when needed.
 
-The VSIX is:
+**Version source of truth:** `package.json` → `"version"`. Do not hardcode version numbers in this file or in `.cursor/rules/`.
+
+The VSIX artifact is:
 
 ```text
-/home/opc/SuperGit/supergit-1.0.0.vsix
+/home/opc/SuperGit/supergit-<version>.vsix
+```
+
+where `<version>` is the `"version"` field in `package.json` (produced by `npm run package` / `vsce package`).
+
+Resolve before telling the user:
+
+```bash
+node -p "require('./package.json').version"
 ```
 
 Install through the remote VS Code window:
@@ -391,13 +401,12 @@ Install through the remote VS Code window:
 1. Extensions panel.
 2. `...` menu.
 3. `Install from VSIX...`.
-4. Select `/home/opc/SuperGit/supergit-1.0.0.vsix`.
+4. Select `supergit-<version>.vsix` from the repo root.
 5. Run `Developer: Reload Window`.
 
 Same-version reinstall warning:
 
-- This project packages as `1.0.0` (GA).
-- VS Code may keep an old same-version install.
+- VS Code may keep an old same-version install when `package.json` version unchanged.
 - If fixes do not appear, uninstall SuperGit, reload, install the VSIX, reload again.
 
 The generic `code --install-extension` may fail on this host with:
@@ -441,12 +450,14 @@ Release checklist:
    npm run package
    ```
 
-4. Inspect the VSIX contents with `unzip -l`.
+4. Inspect the VSIX contents with `unzip -l supergit-*.vsix` (version from `package.json`).
 5. Commit the release changes.
 6. Push the release commit.
-7. Create and push tag `vX.Y.Z`.
-8. Create a GitHub release with the matching `supergit-X.Y.Z.vsix` asset.
+7. Create and push tag `v<version>` matching `package.json`.
+8. Create a GitHub release with the matching `supergit-<version>.vsix` asset.
 9. Verify the release asset uploaded.
+
+Do not edit rules or `AGENTS.md` to embed the new version literal — they reference `package.json` instead.
 
 Do not publish to the VS Code Marketplace from agent actions unless the maintainer explicitly asks for marketplace publishing and provides the required credentials/process. The normal policy is that the maintainer publishes manually.
 
@@ -481,8 +492,10 @@ Current expected unit status:
 Check VSIX contents:
 
 ```bash
-unzip -l supergit-1.0.0.vsix
+unzip -l supergit-*.vsix
 ```
+
+(or `unzip -l "supergit-$(node -p "require('./package.json').version").vsix"`)
 
 Expected included files:
 

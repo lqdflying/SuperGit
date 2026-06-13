@@ -19,9 +19,28 @@ npm run package
 
 Current expected unit status: **67 tests** passing; coverage target met for `src/git/*.ts`.
 
+## Version source of truth
+
+**Do not hardcode version numbers in rules or `AGENTS.md`.** Always resolve from repo metadata:
+
+| What | Source |
+|------|--------|
+| Extension version | `package.json` → `"version"` |
+| VSIX filename | `supergit-<version>.vsix` (from `package.json`; `vsce package` output) |
+| VSIX path | `/home/opc/SuperGit/supergit-<version>.vsix` |
+| Git release tag | `v<version>` (must match `package.json`) |
+
+Resolve at need:
+
+```bash
+node -p "require('./package.json').version"
+```
+
+After `npm run package`, report the path using the version you just read — do not copy a stale literal from docs.
+
 ## VSIX output
 
-`/home/opc/SuperGit/supergit-1.0.0.vsix`
+Expected artifact pattern: `supergit-<version>.vsix` in the repo root (see `package.json`).
 
 Expected contents include: `extension/package.json`, `dist/extension.js`, `dist/webview/main.js`, `media/styles.css`, `assets/icon.png`, `assets/logo.png`.
 
@@ -39,7 +58,7 @@ Package uses: `vsce package --no-dependencies --allow-missing-repository` (bundl
 Tell the user:
 
 1. Extensions → `...` → **Install from VSIX...**
-2. Select `/home/opc/SuperGit/supergit-1.0.0.vsix`
+2. Select `supergit-<version>.vsix` from the repo root (`<version>` = `package.json` `"version"`)
 3. **Developer: Reload Window**
 
 If fixes do not appear after a same-version rebuild, remind them: uninstall → reload → install VSIX → reload (user performs these steps).
