@@ -6,25 +6,25 @@ SuperGit is a VS Code extension for visual Git history and branch-to-remote trac
 
 ### Commit Graph
 
-![SuperGit commit graph with swimlane lanes, author/date/hash columns, and commit detail panel](assets/CommitGraph.png)
+![SuperGit commit graph with topology swimlanes, branch sidebar, author/date/hash columns, and commit detail panel](assets/CommitGraph.png)
 
 ### Branch Tracking
 
-![SuperGit branch tracking with multi-remote ahead/behind status and contextual quick actions](assets/BranchTracking.png)
+![SuperGit branch tracking with origin and upstream remotes, default-branch badges, and contextual quick actions](assets/BranchTracking.png)
 
 ### Branch History
 
-![SuperGit branch history timeline with diverged lanes, ghost tracks, and branch detail panel](assets/BranchHistory.png)
+![SuperGit branch history with responsive timeline, diverged ghost tracks, enhanced legend, and Last active metrics](assets/BranchHistory.png)
 
 ## Features
 
 - Commit graph with topology swimlanes, merge nodes, refs, tags, author/date/hash columns, and commit detail panel.
-- Branch history timeline: per-branch lanes, divergence ghost tracks, remote push markers, and contextual actions.
+- Branch history timeline: per-branch lanes, responsive day columns (no horizontal scroll), divergence ghost tracks, remote push markers, and contextual actions.
 - Date range filters for 7 days, 14 days, 30 days, All, and custom ranges.
 - Search by commit message, hash, author, branch refs, and tags.
-- Branch tracking view for local branches across multiple remotes.
+- Branch tracking view for local branches across multiple remotes with default-branch indicators.
 - Ahead/behind badges, synced state, and no-upstream indicators.
-- Quick actions for fetch, pull, push, set upstream, and prune stale refs.
+- Quick actions for fetch, pull, push, set upstream (multi-remote QuickPick), and prune stale refs.
 - Commit actions for checkout, cherry-pick, revert, create branch, create tag, and copy hash.
 - Bottom status-bar entry: `$(git-commit) SuperGit`.
 
@@ -121,7 +121,7 @@ where `<version>` is the `"version"` field in `package.json`.
 Current local verification:
 
 - TypeScript typecheck passes.
-- Unit tests pass: 118 tests.
+- Unit tests pass: 171 tests.
 - Coverage passes the design target for `src/git/*.ts`.
 - VSIX packaging passes and includes `CHANGELOG.md`, `README.md`, `LICENSE`, `assets/icon.png`, `assets/logo.png`, `assets/CommitGraph.png`, `assets/BranchTracking.png`, `assets/BranchHistory.png`, bundled extension/webview JavaScript, and CSS.
 

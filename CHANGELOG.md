@@ -8,12 +8,16 @@
 - **Prune Stale** clears broken upstream links after fetch/prune (with confirmation); shows which branches were updated.
 - Remote default-branch resolution and caching (`remote-default.ts`); delete-remote guard blocks remote default branches.
 - Refresh coordination rules and managed-refresh guard (`supergit-refresh-coordination.mdc`).
+- Branch History responsive timeline (`timelineLayout.ts`, `useTimelineLayout.ts`): `ResizeObserver` scales day columns to panel width.
 
 ### Changed
 
 - Branch Tracking table uses fixed column widths (228 / 170 / 272px) so rows do not stretch across the panel.
 - Title-bar Refresh fetches and prunes only — upstream cleanup is explicit via **Prune Stale**, not silent on Refresh.
 - After branch actions, reload commits for **fetch**, **prune-stale**, and **delete-remote** (graph and history stay in sync).
+- Branch History timeline fits the panel (no horizontal scrollbar); smart hiding for hash labels and remote markers at narrow widths.
+- **Set upstream** / **Push and Set Upstream** use extension-host QuickPick when multiple remotes are configured (no manual `remote/branch` input).
+- README screenshots updated for Commit Graph, Branch Tracking, and Branch History.
 
 ### Fixed
 
@@ -27,7 +31,7 @@
 ### Verified
 
 - `npm run typecheck`
-- `npm run test:coverage` (157 tests)
+- `npm run test:coverage` (171 tests)
 - `npm run build`
 - `npm run package`
 

@@ -3,7 +3,6 @@ import type { BranchAction, CommitAction, RemoteConfig } from "../shared/types";
 import { isBranchMergedInto, resolveDefaultBranch } from "./branch-lifecycle";
 import { resolveRemoteDefaultBranch } from "./remote-default";
 import { getCurrentBranch, getRemotes, unsetStaleUpstreamLinks } from "./commands";
-import { parseUpstreamRef } from "./parser";
 import { runGit } from "./runner";
 
 export interface ActionResult {
@@ -363,21 +362,22 @@ async function executeSetUpstream(
   }
 
   const remotes = await getRemotes(cwd);
-  const defaultRemote = remote || remotes[0]?.name || "origin";
-  const defaultRemoteBranch = resolveRemoteBranchName(branch, remoteBranchName);
-  const upstream = await vscode.window.showInputBox({
+  const remoteChoice = await resolveRemoteChoice(cwd, remote, {
     title: "Set Upstream",
-    prompt: `Remote tracking ref for ${branch}`,
-    value: `${defaultRemote}/${defaultRemoteBranch}`
+    includeAll: false
   });
-  if (!upstream) {
+  if (remoteChoice.cancelled) {
     return { success: false, message: "Set upstream cancelled." };
   }
 
-  const parsed = parseUpstreamRef(upstream.trim(), remotes.map((candidate) => candidate.name));
-  if (!parsed) {
-    return { success: false, message: "Upstream must look like remote/branch (for example origin/main)." };
+  const chosenRemote = remoteChoice.remote ?? remotes[0]?.name;
+  if (!chosenRemote) {
+    return { success: false, message: "No remote configured." };
   }
+
+  const remoteBranch = resolveRemoteBranchName(branch, remoteBranchName);
+  const upstream = formatRemoteRef(chosenRemote, remoteBranch);
+  const parsed = { remote: chosenRemote, branch: remoteBranch };
 
   const remoteRef = formatRemoteRef(parsed.remote, parsed.branch);
   const hasLocalTrackingRef = await localRemoteTrackingRefExists(cwd, parsed.remote, parsed.branch);

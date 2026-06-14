@@ -165,12 +165,12 @@ describe("executeBranchAction", () => {
       return ok("");
     });
     await executeBranchAction("/repo", "set-upstream");
-    expect(showInputBoxMock).toHaveBeenCalledWith(expect.objectContaining({ value: "origin/main" }));
+    expect(showInputBoxMock).not.toHaveBeenCalled();
+    expect(showQuickPickMock).not.toHaveBeenCalled();
     expect(runGitMock).toHaveBeenCalledWith(["branch", "--set-upstream-to", "origin/main", "main"], "/repo", { timeout: 120_000 });
   });
 
   it("pushes and sets upstream when the remote branch does not exist yet", async () => {
-    showInputBoxMock.mockResolvedValue("origin/feature/local-only");
     showWarningMessageMock.mockResolvedValue("Push and Set Upstream");
     runGitMock.mockImplementation(async (args) => {
       if (args[0] === "rev-parse" && args[1] === "--verify") {
@@ -182,11 +182,11 @@ describe("executeBranchAction", () => {
       return ok("");
     });
     await executeBranchAction("/repo", "set-upstream", "feature/local-only", "origin");
+    expect(showInputBoxMock).not.toHaveBeenCalled();
     expect(runGitMock).toHaveBeenCalledWith(["push", "-u", "origin", "feature/local-only"], "/repo", { timeout: 120_000 });
   });
 
   it("fetches and sets upstream when the remote branch exists but is not fetched locally", async () => {
-    showInputBoxMock.mockResolvedValue("origin/feature/x");
     showWarningMessageMock.mockResolvedValue("Fetch and Set Upstream");
     runGitMock.mockImplementation(async (args) => {
       if (args[0] === "rev-parse" && args[1] === "--verify") {
@@ -198,6 +198,7 @@ describe("executeBranchAction", () => {
       return ok("");
     });
     await executeBranchAction("/repo", "set-upstream", "feature/x", "origin");
+    expect(showInputBoxMock).not.toHaveBeenCalled();
     expect(runGitMock).toHaveBeenCalledWith(
       ["fetch", "origin", "refs/heads/feature/x:refs/remotes/origin/feature/x"],
       "/repo",
@@ -206,12 +207,11 @@ describe("executeBranchAction", () => {
     expect(runGitMock).toHaveBeenCalledWith(["branch", "--set-upstream-to", "origin/feature/x", "feature/x"], "/repo", { timeout: 120_000 });
   });
 
-  it("parses slash remotes when fetching and setting upstream", async () => {
+  it("supports slash remotes when fetching and setting upstream", async () => {
     getRemotesMock.mockResolvedValue([
       { name: "foo", url: "foo-url", colorIndex: 0 },
       { name: "foo/bar", url: "foo-bar-url", colorIndex: 1 }
     ]);
-    showInputBoxMock.mockResolvedValue("foo/bar/main");
     showWarningMessageMock.mockResolvedValue("Fetch and Set Upstream");
     runGitMock.mockImplementation(async (args) => {
       if (args[0] === "rev-parse" && args[1] === "--verify") {
@@ -224,6 +224,7 @@ describe("executeBranchAction", () => {
       return ok("");
     });
     await executeBranchAction("/repo", "set-upstream", "work", "foo/bar", "main");
+    expect(showInputBoxMock).not.toHaveBeenCalled();
     expect(runGitMock).toHaveBeenCalledWith(
       ["fetch", "foo/bar", "refs/heads/main:refs/remotes/foo/bar/main"],
       "/repo",
@@ -233,7 +234,6 @@ describe("executeBranchAction", () => {
   });
 
   it("uses explicit remote branch names when pushing and setting upstream", async () => {
-    showInputBoxMock.mockResolvedValue("origin/feature/a");
     showWarningMessageMock.mockResolvedValue("Push and Set Upstream");
     runGitMock.mockImplementation(async (args) => {
       if (args[0] === "rev-parse" && args[1] === "--verify") {
@@ -245,11 +245,58 @@ describe("executeBranchAction", () => {
       return ok("");
     });
     await executeBranchAction("/repo", "set-upstream", "work", "origin", "feature/a");
+    expect(showInputBoxMock).not.toHaveBeenCalled();
     expect(runGitMock).toHaveBeenCalledWith(["push", "-u", "origin", "work:feature/a"], "/repo", { timeout: 120_000 });
   });
 
-  it("cancels set upstream without input", async () => {
-    showInputBoxMock.mockResolvedValue(undefined);
+  it("shows QuickPick when setting upstream with multiple remotes and no remote param", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
+    ]);
+    showQuickPickMock.mockResolvedValue({ label: "upstream", description: "upstream-url", remote: { name: "upstream", url: "upstream-url", colorIndex: 1 } });
+    showWarningMessageMock.mockResolvedValue("Push and Set Upstream");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return fail("unknown ref");
+      }
+      if (args[0] === "ls-remote") {
+        return ok("");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "set-upstream", "main");
+    expect(showQuickPickMock).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ title: "Set Upstream" }));
+    expect(showInputBoxMock).not.toHaveBeenCalled();
+    expect(runGitMock).toHaveBeenCalledWith(["push", "-u", "upstream", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("skips QuickPick when setting upstream with explicit remote param", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
+    ]);
+    showWarningMessageMock.mockResolvedValue("Push and Set Upstream");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return fail("unknown ref");
+      }
+      if (args[0] === "ls-remote") {
+        return ok("");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "set-upstream", "main", "origin");
+    expect(showQuickPickMock).not.toHaveBeenCalled();
+    expect(runGitMock).toHaveBeenCalledWith(["push", "-u", "origin", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("cancels set upstream when remote pick is dismissed", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
+    ]);
+    showQuickPickMock.mockResolvedValue(undefined);
     await expect(executeBranchAction("/repo", "set-upstream", "main")).resolves.toEqual({ success: false, message: "Set upstream cancelled." });
     expect(runGitMock).not.toHaveBeenCalled();
   });
