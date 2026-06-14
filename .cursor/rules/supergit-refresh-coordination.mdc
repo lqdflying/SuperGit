@@ -26,6 +26,7 @@ Any path that runs slow ref-mutating Git (`fetch --all --prune`, push, pull, pru
 | `loadInitialData` | Dedupe in-flight promise; log `coalesced with in-flight load` |
 | `enrichRemoteDefaultsInBackground` | Check inflight map **before** bumping generation; key = `root + sorted remote names` |
 | Apply enriched remotes | Post only when `key === latestEnrichRemoteDefaultsKey` (handles A→B→A coalesce edge) |
+| `loadBranchHistory` | Bump `branchHistoryLoadGeneration` on start; post data and clear `branch-history` loading only when `generation === branchHistoryLoadGeneration` (overlapping tab entry + post-action reload) |
 
 Do **not** increment enrichment generation on coalesced return — that skips valid in-flight results.
 
@@ -41,7 +42,9 @@ Without default-branch cache invalidation, default badges and delete-default-rem
 
 **Stale upstream cleanup:** `unsetStaleUpstreamLinks()` runs only from explicit **Prune Stale** (confirmed action), not title-bar Refresh. Abort cleanup when `refs/remotes/` for-each-ref fails — never treat a failed listing as “no refs exist.”
 
-**Post-action reload:** `fetch` and `prune-stale` must call `loadCommits` (remote refs on graph). `delete-remote` must reload branches, remotes, history, and commits.
+**Post-action reload:** `fetch` and `prune-stale` must call `loadCommits` (remote refs on graph). `delete-remote` must reload branches, remotes, and commits.
+
+**Branch history after actions:** `runBranchAction` must **not** unconditionally call `loadBranchHistory` — it is expensive (~100+ Git commands). Gate with `shouldReloadBranchHistoryAfterAction(actionTab, currentTab)` in `src/extension/refreshPolicy.ts`: reload when **either** the click-time `activeTab` snapshot **or** host `activeWebviewTab` (from `tab-changed`) is `"history"`. This avoids stale History after a mid-action tab switch. Webview posts `tab-changed` via a single `useEffect([tab])`; `loadBranches` + `loadRemotes` may run in parallel. Switching to History tab still triggers `request-branch-history` lazily.
 
 ## Webview commit requests (`App.tsx`)
 

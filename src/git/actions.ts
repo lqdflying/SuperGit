@@ -85,18 +85,24 @@ export async function executeBranchAction(
       if (remoteChoice.cancelled) {
         return { success: false, message: "Push cancelled." };
       }
-      if (!remoteChoice.remote) {
+
+      const remotes = await getRemotes(cwd);
+      const remoteName = remoteChoice.remote ?? (branchName ? remotes[0]?.name : undefined);
+      if (!remoteName) {
+        if (branchName) {
+          return { success: false, message: "No remote configured." };
+        }
         return runGuarded(cwd, "Push the current branch?", ["push"], "Pushed current branch.");
       }
 
       const remoteBranch = resolveRemoteBranchName(branch, remoteBranchName);
-      const remoteRef = formatRemoteRef(remoteChoice.remote, remoteBranch);
+      const remoteRef = formatRemoteRef(remoteName, remoteBranch);
       const confirmation =
-        remoteBranch === branch ? `Push ${branch} to ${remoteChoice.remote}?` : `Push ${branch} to ${remoteRef}?`;
+        remoteBranch === branch ? `Push ${branch} to ${remoteName}?` : `Push ${branch} to ${remoteRef}?`;
       const successMessage =
-        remoteBranch === branch ? `Pushed ${branch} to ${remoteChoice.remote}.` : `Pushed ${branch} to ${remoteRef}.`;
+        remoteBranch === branch ? `Pushed ${branch} to ${remoteName}.` : `Pushed ${branch} to ${remoteRef}.`;
 
-      return runGuarded(cwd, confirmation, pushCommand(remoteChoice.remote, branch, remoteBranchName), successMessage);
+      return runGuarded(cwd, confirmation, pushCommand(remoteName, branch, remoteBranchName), successMessage);
     }
     case "pull": {
       const branch = branchName || (await getCurrentBranch(cwd));

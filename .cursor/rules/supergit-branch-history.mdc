@@ -16,8 +16,10 @@ Answers: which branches diverged/stale, where pushed vs unpushed, multi-remote d
 App (tab=history) → request-branch-history { dateRange }
   → extension.loadBranchHistory → getBranchLifecycles()
   → branch-history-data { lifecycles, defaultBranch, remoteMains, window }
-  → BranchHistoryTab → execute-branch-action (on success: reload branches/remotes/history/commits)
+  → BranchHistoryTab → execute-branch-action (on success: reload branches/remotes; history only if action or current tab is History; commits when refs changed)
 ```
+
+Webview posts `tab-changed` on every tab change (`useEffect([tab])`); extension tracks `activeWebviewTab`. Post-action history reload uses race-safe policy in `refreshPolicy.ts` — not the click snapshot alone (user may switch to History mid-action).
 
 Messages/types: `BranchLifecycle`, `BranchHistoryPayload`, loading scope `branch-history` in `src/shared/types.ts`.
 

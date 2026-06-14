@@ -124,6 +124,22 @@ describe("executeBranchAction", () => {
     expect(runGitMock).toHaveBeenCalledWith(["push"], "/repo", { timeout: 120_000 });
   });
 
+  it("pushes an explicit branch to the sole remote when no remote param is passed", async () => {
+    getCurrentBranchMock.mockResolvedValue("other");
+    await executeBranchAction("/repo", "push", "feature/x");
+    expect(showQuickPickMock).not.toHaveBeenCalled();
+    expect(runGitMock).toHaveBeenCalledWith(["push", "origin", "feature/x"], "/repo", { timeout: 120_000 });
+  });
+
+  it("reports no remote when pushing an explicit branch with zero remotes", async () => {
+    getRemotesMock.mockResolvedValue([]);
+    await expect(executeBranchAction("/repo", "push", "feature/x")).resolves.toEqual({
+      success: false,
+      message: "No remote configured."
+    });
+    expect(runGitMock).not.toHaveBeenCalled();
+  });
+
   it("pushes, pulls, and fetches explicit remote branches", async () => {
     await executeBranchAction("/repo", "push", "main", "origin");
     await executeBranchAction("/repo", "pull", "main", "origin");

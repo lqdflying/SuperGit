@@ -102,12 +102,11 @@ Add/keep a unit test for the non-checked-out pull path in `src/test/unit/actions
 
 After successful branch actions in `runBranchAction` (`src/extension.ts`), refresh tracking data in a predictable order:
 
-1. `loadBranches(root)`
-2. `loadRemotes(root)`
-3. `loadBranchHistory(lastBranchHistoryRequest.dateRange, root)` — keeps Branch History fresh after push/pull/etc.
-4. `loadCommits(...)` when push/pull/set-upstream/delete changed history
+1. `Promise.all([loadBranches(root), loadRemotes(root)])`
+2. `loadBranchHistory(...)` **only when** `shouldReloadBranchHistoryAfterAction(actionTab, activeWebviewTab)` — i.e. action-time or current tab is History (race-safe if user switches tabs mid-action)
+3. `loadCommits(...)` when push/pull/set-upstream/delete changed history
 
-Do not assume a full `loadInitialData()` parallel reload is enough for the tracking or history tabs to feel fresh immediately after pull/push.
+Do not unconditionally reload branch history after Graph/Tracking actions — History is lazy-loaded on tab entry via `request-branch-history`. Mid-action tab switch to History must still get a post-action history reload.
 
 Pass explicit `branchName` and `remote` from the webview through `execute-branch-action` so actions target the selected row, not only the checked-out branch.
 

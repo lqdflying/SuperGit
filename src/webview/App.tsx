@@ -16,7 +16,8 @@ import {
   type PaginationState,
   type RemoteBranchInfo,
   type RemoteConfig,
-  type RepositoryState
+  type RepositoryState,
+  type WebviewTab
 } from "../shared/types";
 import { TitleBar } from "./components/TitleBar";
 import { TabButton } from "./components/TabBar";
@@ -86,7 +87,7 @@ function commitQueryKey(dateRange: DateRange, page: number, searchText: string, 
 }
 
 export function App() {
-  const [tab, setTab] = useState<"graph" | "branches" | "history">("graph");
+  const [tab, setTab] = useState<WebviewTab>("graph");
   const [repo, setRepo] = useState<RepositoryState>(emptyRepo);
   const [commits, setCommits] = useState<CommitNode[]>([]);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
@@ -212,6 +213,10 @@ export function App() {
   }, [dateRange, pagination.page, searchText, historyScope]);
 
   useEffect(() => {
+    postMessage({ type: "tab-changed", tab });
+  }, [tab]);
+
+  useEffect(() => {
     if (tab !== "history") {
       return;
     }
@@ -305,7 +310,7 @@ export function App() {
   }
 
   function executeBranch(action: BranchAction, branchName?: string, remote?: string, remoteBranchName?: string) {
-    postMessage({ type: "execute-branch-action", action, branchName, remote, remoteBranchName });
+    postMessage({ type: "execute-branch-action", action, branchName, remote, remoteBranchName, activeTab: tab });
   }
 
   function openFileDiff(file: CommitFileChange) {

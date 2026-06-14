@@ -190,6 +190,8 @@ export interface BranchHistoryWindow {
   endDate: string;
 }
 
+export type WebviewTab = "graph" | "branches" | "history";
+
 export type WebviewMessage =
   | { type: "ready" }
   | { type: "webview-log"; level: "debug" | "info" | "warn" | "error"; message: string; details?: unknown }
@@ -201,8 +203,9 @@ export type WebviewMessage =
   | { type: "request-commit-details"; commitHash: string }
   | { type: "open-commit-file-diff"; commitHash: string; file: CommitFileChange }
   | { type: "refresh" }
+  | { type: "tab-changed"; tab: WebviewTab }
   | { type: "execute-action"; action: CommitAction; commitHash: string }
-  | { type: "execute-branch-action"; action: BranchAction; branchName?: string; remote?: string; remoteBranchName?: string };
+  | { type: "execute-branch-action"; action: BranchAction; branchName?: string; remote?: string; remoteBranchName?: string; activeTab?: WebviewTab };
 
 export type ExtHostMessage =
   | { type: "repo-state"; repo: RepositoryState }

@@ -51,7 +51,7 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 - `git pull --ff-only origin <branch>` updates the **checked-out** branch, not `<branch>` when another branch is selected
 - Non-checked-out pull: `git fetch <remote> <branch>:<branch>` (fast-forward only; no `+`)
 - Checked-out pull: `git pull --ff-only <remote> <branch>`
-- After successful branch actions in `runBranchAction`, refresh in order: `loadBranches` → `loadRemotes` → **`loadBranchHistory`** → `loadCommits` when refs/history changed (includes **delete-remote**, **fetch**, **prune-stale**)
+- After successful branch actions in `runBranchAction`, refresh in order: `Promise.all([loadBranches, loadRemotes])` → **`loadBranchHistory` only when action or current tab is History** (`shouldReloadBranchHistoryAfterAction`) → `loadCommits` when refs/history changed (includes **delete-remote**, **fetch**, **prune-stale**)
 - **`invalidateRemoteDataCaches(root)`** after fetch/prune/actions (remotes list + per-remote default-branch cache)
 - **Fetch and Set Upstream** when remote branch exists but not fetched: use explicit refspec `refs/heads/<branch>:refs/remotes/<remote>/<branch>` before `git branch --set-upstream-to` (plain `git fetch remote branch` may only update FETCH_HEAD)
 - **Set upstream / Push and Set Upstream:** multi-remote repos use extension-host `showQuickPick` (not manual input); remote branch defaults to local branch name (or explicit `remoteBranchName` from selection)

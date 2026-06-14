@@ -16,6 +16,8 @@ import {
 import { enrichRemotesWithDefaultBranches } from "./git/remote-default";
 import { runGit } from "./git/runner";
 import { createSuperGitContentUri, SUPERGIT_DIFF_SCHEME, SuperGitDiffContentProvider } from "./git/diffProvider";
+import { beginBranchHistoryLoad, isCurrentBranchHistoryLoad } from "./extension/branchHistoryLoad";
+import { shouldReloadBranchHistoryAfterAction } from "./extension/refreshPolicy";
 import { debug, error as logError, info, initializeLogger, isDebugEnabled, showLogs, warn } from "./logger";
 import {
   DEFAULT_DATE_RANGE,
@@ -28,7 +30,8 @@ import {
   type ExtHostMessage,
   type HistoryScope,
   type RemoteConfig,
-  type WebviewMessage
+  type WebviewMessage,
+  type WebviewTab
 } from "./shared/types";
 
 let panel: vscode.WebviewPanel | undefined;
@@ -54,6 +57,8 @@ const lastCommitRequest: { dateRange: DateRange; page: number; searchText: strin
 const lastBranchHistoryRequest: { dateRange: DateRange } = {
   dateRange: DEFAULT_DATE_RANGE
 };
+
+let activeWebviewTab: WebviewTab = "graph";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = initializeLogger(context);
@@ -277,11 +282,15 @@ async function handleWebviewMessage(message: WebviewMessage): Promise<void> {
     case "refresh":
       await refreshFromRemote();
       return;
+    case "tab-changed":
+      activeWebviewTab = message.tab;
+      debug("webview tab changed", { tab: message.tab });
+      return;
     case "execute-action":
       await runCommitAction(message.action, message.commitHash);
       return;
     case "execute-branch-action":
-      await runBranchAction(message.action, message.branchName, message.remote, message.remoteBranchName);
+      await runBranchAction(message.action, message.branchName, message.remote, message.remoteBranchName, message.activeTab);
       return;
   }
 }
@@ -480,16 +489,25 @@ async function enrichRemoteDefaultsInner(root: string, remotes: RemoteConfig[], 
 }
 
 async function loadBranchHistory(dateRange: DateRange, knownRoot?: string): Promise<void> {
-  debug("loadBranchHistory start", { dateRange, knownRoot });
+  const generation = beginBranchHistoryLoad();
+  debug("loadBranchHistory start", { dateRange, knownRoot, generation });
   post({ type: "loading", loading: true, scope: "branch-history" });
   try {
     const root = knownRoot ?? (await resolveRepositoryRoot());
+    if (!isCurrentBranchHistoryLoad(generation)) {
+      debug("loadBranchHistory result skipped; superseded", { generation });
+      return;
+    }
     if (!root) {
       post({ type: "branch-history-data", lifecycles: [], defaultBranch: "main", remoteMains: [], window: { totalDays: 7, startDate: "", endDate: "" } });
       return;
     }
 
     const payload = await getBranchLifecycles(root, dateRange);
+    if (!isCurrentBranchHistoryLoad(generation)) {
+      debug("loadBranchHistory result skipped; superseded", { generation });
+      return;
+    }
     post({
       type: "branch-history-data",
       lifecycles: payload.lifecycles,
@@ -500,12 +518,17 @@ async function loadBranchHistory(dateRange: DateRange, knownRoot?: string): Prom
     info("branch history loaded", {
       count: payload.lifecycles.length,
       defaultBranch: payload.defaultBranch,
-      remoteMainCount: payload.remoteMains.length
+      remoteMainCount: payload.remoteMains.length,
+      generation
     });
   } catch (error) {
-    postError(error);
+    if (isCurrentBranchHistoryLoad(generation)) {
+      postError(error);
+    }
   } finally {
-    post({ type: "loading", loading: false, scope: "branch-history" });
+    if (isCurrentBranchHistoryLoad(generation)) {
+      post({ type: "loading", loading: false, scope: "branch-history" });
+    }
   }
 }
 
@@ -532,7 +555,13 @@ async function runCommitAction(action: CommitAction, commitHash: string): Promis
   }
 }
 
-async function runBranchAction(action: BranchAction, branchName?: string, remote?: string, remoteBranchName?: string): Promise<void> {
+async function runBranchAction(
+  action: BranchAction,
+  branchName?: string,
+  remote?: string,
+  remoteBranchName?: string,
+  actionTab?: WebviewTab
+): Promise<void> {
   info("branch action requested", { action, branchName, remote, remoteBranchName });
   const root = await resolveRepositoryRoot();
   if (!root) {
@@ -554,9 +583,13 @@ async function runBranchAction(action: BranchAction, branchName?: string, remote
       const repo = await getRepositoryState(root);
       repo.lastFetched = new Date().toISOString();
       post({ type: "repo-state", repo });
-      await loadBranches(root);
-      await loadRemotes(root);
-      await loadBranchHistory(lastBranchHistoryRequest.dateRange, root);
+      await Promise.all([loadBranches(root), loadRemotes(root)]);
+      const currentTab = activeWebviewTab;
+      if (shouldReloadBranchHistoryAfterAction(actionTab, currentTab)) {
+        await loadBranchHistory(lastBranchHistoryRequest.dateRange, root);
+      } else {
+        debug("loadBranchHistory skipped; history tab inactive", { actionTab, currentTab, action });
+      }
       if (
         action === "pull" ||
         action === "push" ||
@@ -756,6 +789,18 @@ function summarizeWebviewMessage(message: WebviewMessage) {
       action: message.action,
       commitHash: message.commitHash.slice(0, 12)
     };
+  }
+  if (message.type === "execute-branch-action") {
+    return {
+      type: message.type,
+      action: message.action,
+      branchName: message.branchName,
+      remote: message.remote,
+      activeTab: message.activeTab
+    };
+  }
+  if (message.type === "tab-changed") {
+    return { type: message.type, tab: message.tab };
   }
   if (message.type === "webview-log") {
     return {
