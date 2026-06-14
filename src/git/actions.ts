@@ -469,12 +469,11 @@ async function executeAddUpstream(
 
   const chosenRemote = remoteChoice.remote;
   const remoteRef = formatRemoteRef(chosenRemote, remoteBranch);
-  const hasLocalTrackingRef = await localRemoteTrackingRefExists(cwd, chosenRemote, remoteBranch);
-  if (hasLocalTrackingRef) {
-    return { success: true, message: `${branch} is already tracked on ${remoteRef}.` };
-  }
 
-  const existsOnRemote = await remoteBranchExistsOnRemote(cwd, chosenRemote, remoteBranch);
+  const skipRemoteProbe = vscode.workspace.getConfiguration("superGit").get<boolean>("addUpstream.skipRemoteProbe", false);
+  const existsOnRemote = skipRemoteProbe
+    ? false
+    : await remoteBranchExistsOnRemote(cwd, chosenRemote, remoteBranch);
   if (existsOnRemote) {
     return runGuarded(
       cwd,

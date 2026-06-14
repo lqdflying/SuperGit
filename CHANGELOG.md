@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.3.0 - 2026-06-14
+
+### Added
+
+- **Multi-remote upstream tracking**: `Add Remote Tracking` action pushes/fetches to additional remotes without changing the default upstream; `Set as Default Upstream` reassigns the configured default.
+- **Branch History caching** (`src/extension/branchHistoryCache.ts`): per-root keyed cache with dirty/epoch invalidation — instant tab re-entry when data unchanged.
+- **Refresh policy classifiers** (`src/extension/refreshPolicy.ts`): action-driven gating of remote-default enrichment, commit graph reload, and history cache invalidation.
+- **Commit graph dirty deferral**: skip `loadCommits` when Graph tab is inactive; reload once on next tab switch (epoch-guarded to prevent stale clears).
+- **`superGit.addUpstream.skipRemoteProbe`** setting: skip `ls-remote --heads` preflight for `add-upstream` in trusted environments — trades graceful validation for instant action start.
+- Epoch/generation guards for Branch History cache and commit-graph dirty flag — prevent in-flight async loads from overwriting newer state.
+
+### Changed
+
+- Post-action refresh uses selective `invalidateRemoteDataCaches({ defaultBranches })` — full invalidation only for `fetch`, `prune-stale`, `delete-remote`; list-only for safe actions.
+- `loadRemotes` accepts `{ enrichDefaults }` option; post-action calls skip `ls-remote --symref` enrichment for actions that cannot change remote HEAD.
+- `loadInitialData` marks branch history dirty **before** parallel reload (epoch bumped eagerly); inline `loadBranchHistory` only when History tab is active after success.
+- `canAddRemoteTracking` button gating uses `hasMissingRemoteTrackingForTarget()` with single target branch name (was checking all branch names, causing false positives).
+- Updated AGENTS.md and `.cursor/rules/` with performance architecture lessons, epoch patterns, and new module documentation.
+
+### Fixed
+
+- "Add Remote Tracking" button disappeared when clicking local branch pill (gating checked `hasConfiguredUpstream` instead of `hasExistingTracking`).
+- Redundant `localRemoteTrackingRefExists()` call removed from `executeAddUpstream` preflight — was duplicate network-class latency before `ls-remote`.
+- In-flight `loadBranchHistory` could write stale data when a newer action bumped cache epoch mid-flight (epoch guard discards outdated results).
+- In-flight `loadCommits` could clear a newer `commitGraphDirty` flag set by a branch action during its execution (epoch guard prevents premature clear).
+- `tab-changed` to Graph no longer clears `commitGraphDirty` before `loadCommits` completes (deferred clear prevents swallowed retries on failure).
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (219 tests)
+- `npm run build`
+- `npm run package`
+
 ## 1.2.1 - 2026-06-14
 
 ### Added

@@ -91,6 +91,17 @@ When a branch already has a default upstream and the repo has multiple remotes:
 
 ## Git Action Lessons
 
+### Add Remote Tracking Preflight (`add-upstream`)
+
+`executeAddUpstream` in `src/git/actions.ts`:
+
+1. Extension-host QuickPick selects remote (only those without existing local `refs/remotes/<remote>/<branch>`).
+2. **Remote probe**: `git ls-remote --heads <remote> <branch>` confirms branch exists on remote. This is the slowest step (~1–3s network).
+3. Setting `superGit.addUpstream.skipRemoteProbe: true` skips step 2 — action proceeds directly with push or fetch, letting Git report if branch is missing. Documented tradeoff: less graceful error but instant action start.
+4. Push-or-fetch: if local branch is ahead, `git push <remote> <branch>` (no `-u`); else `git fetch <remote> <branch>:<branch>` (fast-forward refspec).
+
+**Button gating in webview**: `canAddRemoteTracking` uses `hasMissingRemoteTrackingForTarget(branch, remotes, targetBranchName)` — checks whether *any* remote lacks a tracking ref for that single target name. Requires at least one *existing* `remoteRefExists` tracking ref (so it shows only after first upstream is set, not for brand new untracked branches).
+
 ### Pull On A Non-Checked-Out Branch
 
 `git pull --ff-only origin <branch>` does **not** update `<branch>` when another branch is checked out. Git fetches, then merges into the **current** branch.
@@ -109,15 +120,32 @@ Add/keep a unit test for the non-checked-out pull path in `src/test/unit/actions
 
 ### Refresh After Branch Actions
 
-After successful branch actions in `runBranchAction` (`src/extension.ts`), refresh tracking data in a predictable order:
+After successful branch actions in `runBranchAction` (`src/extension.ts`), refresh per classifiers in `src/extension/refreshPolicy.ts`:
 
-1. `Promise.all([loadBranches(root), loadRemotes(root)])`
-2. `loadBranchHistory(...)` **only when** `shouldReloadBranchHistoryAfterAction(actionTab, activeWebviewTab)` — i.e. action-time or current tab is History (race-safe if user switches tabs mid-action)
-3. `loadCommits(...)` when push/pull/set-upstream/delete changed history
+1. `invalidateRemoteDataCaches(root, { defaultBranches: shouldInvalidateRemoteDefaultBranches(action) })`
+2. `Promise.all([loadBranches(root), loadRemotes(root, { enrichDefaults: shouldEnrichRemoteDefaultsAfterAction(action) })])`
+3. History: `loadBranchHistory` inline when tab active, else `markBranchHistoryDirty(root)` only
+4. Commits: `loadCommits` inline when Graph tab active, else set `commitGraphDirty` + bump `commitGraphDirtyEpoch`
 
-Do not unconditionally reload branch history after Graph/Tracking actions — History is lazy-loaded on tab entry via `request-branch-history`. Mid-action tab switch to History must still get a post-action history reload.
+**Action classifiers** in `refreshPolicy.ts`:
+
+- `shouldInvalidateRemoteDefaultBranches` / `shouldEnrichRemoteDefaultsAfterAction` — `fetch`, `prune-stale`, `delete-remote` only (these can change remote HEAD or remote list)
+- `shouldMarkBranchHistoryDirty` / `shouldReloadCommitsAfterAction` — all ref-changing actions
+- `shouldReloadBranchHistoryAfterAction(actionTab, currentTab)` — either is `"history"`
 
 Pass explicit `branchName` and `remote` from the webview through `execute-branch-action` so actions target the selected row, not only the checked-out branch.
+
+### Epoch / Generation Anti-Stale Patterns
+
+When async operations can race with state-mutating events:
+
+1. **Branch History cache epoch** (`branchHistoryCache.ts`): `markBranchHistoryDirty` bumps per-root epoch. In-flight `loadBranchHistory` captures epoch before `getBranchLifecycles()`; discards result if epoch changed mid-flight — prevents stale data from overwriting a clean cache entry.
+
+2. **Commit graph dirty epoch** (`commitGraphDirtyEpoch`): bumped when `commitGraphDirty = true`. `loadCommits` captures epoch at start and only clears dirty if unchanged at end — prevents older in-flight `request-commits` from clearing a newer dirty mark.
+
+3. **Branch history load generation** (`branchHistoryLoad.ts`): guards concurrent `loadBranchHistory` calls; only the latest generation posts results.
+
+**Pattern:** capture epoch/generation before `await`, check after `await`, skip writes/posts if stale. Never unconditionally clear state flags after async work.
 
 ## Branch History UX Lessons
 
@@ -127,9 +155,11 @@ Fine-tuning notes for `src/webview/components/history/` and `src/git/branch-life
 
 - Third tab: `useState<"graph" | "branches" | "history">` in `App.tsx`; icon `history` in `icons.tsx`.
 - **Lazy load** branch history — post `request-branch-history` when `tab === "history"` only (debounced ~150ms); do not block graph startup with `loadInitialData`.
+- **Branch history cache** (`src/extension/branchHistoryCache.ts`): key = `root + dateRange`. Cache hit returns instantly; dirty mark + epoch prevent stale data.
 - Shared `dateRange` from `App.tsx` applies to graph and history; switching tabs does not reset it.
 - **First visit promotion:** on first switch to history, if `dateRange` is still default `7d`, call `setPreset(30)` once (persist flag in `getState()`).
 - History **All** uses `resolveHistoryDateWindow` with a **90-day cap** — not the graph's unbounded All.
+- **Full reload (`loadInitialData`)** marks history dirty **before** `Promise.all` so even partial failures invalidate cache. Inline history reload only after success when History tab active.
 
 ### Selection & lanes
 
@@ -199,6 +229,10 @@ Fine-tuning notes for commit graph/detail work. Full swimlane + table rules: `.c
   - `src/git/commands.ts` exposes higher-level read models.
   - `src/git/branch-lifecycle.ts` + `src/git/branch-status.ts` — Branch History lifecycles and status.
   - `src/git/actions.ts` handles guarded write actions.
+- Performance / coordination layer:
+  - `src/extension/refreshPolicy.ts` — action classifiers (enrichment, invalidation, dirty marking).
+  - `src/extension/branchHistoryCache.ts` — per-root keyed cache with dirty/epoch.
+  - `src/extension/branchHistoryLoad.ts` — generation guard for concurrent loads.
 - Webview:
   - `src/webview/main.tsx` mounts React.
   - `src/webview/App.tsx` owns app state and message handling.
@@ -231,15 +265,46 @@ Commands to keep available:
 - `superGit.showLogs` -> shows the SuperGit output channel.
 - `superGit.toggleDebug` -> toggles debug logging.
 
-Setting:
+Settings:
 
 ```json
 {
-  "superGit.debug": true
+  "superGit.debug": true,
+  "superGit.addUpstream.skipRemoteProbe": false
 }
 ```
 
+- `superGit.debug` — enables debug logs in output channel + log file.
+- `superGit.addUpstream.skipRemoteProbe` — skips `ls-remote --heads` preflight in `add-upstream`; trades graceful validation for instant action start.
+
 This setting can be placed in VS Code Settings JSON. Debug output goes to the `SuperGit` output channel and to a log file under the VS Code Server logs.
+
+## Build Lessons
+
+## Performance Architecture Lessons
+
+### Principles
+
+1. **Selective invalidation** — classify actions by impact; only invalidate/re-enrich what's necessary. `refreshPolicy.ts` centralizes action → effect mapping.
+2. **Deferred loading** — don't reload inactive tabs. Set a dirty flag + epoch and reload on next tab activation.
+3. **Cache with dirty invalidation** — Branch History uses a per-root keyed cache. `markBranchHistoryDirty(root)` bumps epoch; next read sees dirty and reloads.
+4. **Epoch guards for async races** — capture epoch/generation before `await`; discard result if stale after `await`. Apply to any async that can be superseded by a newer event.
+5. **Skip expensive network probes** — optional `skipRemoteProbe` setting removes `ls-remote` from `add-upstream` preflight.
+
+### Common anti-patterns to avoid
+
+- Clearing a dirty/loading flag **before** the async that consumes it completes (prevents retry on failure).
+- Unconditional `enrichRemoteDefaults` after every action — `ls-remote --symref` per remote is 1–3s each.
+- Calling `loadBranchHistory` inline on every `runBranchAction` success even when History tab is not active.
+- Using `localRemoteTrackingRefExists()` before `ls-remote` — both are network-latency-class. Remove the redundant pre-check.
+- Boolean dirty flags without epochs — a slow in-flight load can clear a newer dirty signal.
+
+### Test coverage expectations
+
+- `src/test/unit/refresh-policy.test.ts` — all classifiers.
+- `src/test/unit/branch-history-cache.test.ts` — cache hit/miss, dirty mark, epoch guard.
+- `src/test/unit/remote-default.test.ts` — selective invalidation (`defaultBranches: false`).
+- `src/test/unit/actions.test.ts` — `add-upstream` QuickPick, `set-default-upstream`, skip-remote-probe.
 
 ## Build Lessons
 
@@ -605,8 +670,9 @@ npm run package
 
 Current expected unit status:
 
-- 100 tests passing.
+- 219 tests passing across 14 test files.
 - Coverage above the design target for `src/git/*.ts` (`diffProvider.ts` excluded).
+- Key test files: `actions.test.ts`, `refresh-policy.test.ts`, `branch-history-cache.test.ts`, `remote-default.test.ts`, `utils.test.ts`, `parser.test.ts`, `branch-lifecycle.test.ts`, `branch-status.test.ts`.
 
 `npm run test:integration` may fail in managed containers because Electron cannot start before extension load due to sandbox/display restrictions. Report this clearly instead of treating it as a product failure.
 

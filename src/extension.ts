@@ -17,7 +17,14 @@ import { enrichRemotesWithDefaultBranches } from "./git/remote-default";
 import { runGit } from "./git/runner";
 import { createSuperGitContentUri, SUPERGIT_DIFF_SCHEME, SuperGitDiffContentProvider } from "./git/diffProvider";
 import { beginBranchHistoryLoad, isCurrentBranchHistoryLoad } from "./extension/branchHistoryLoad";
-import { shouldReloadBranchHistoryAfterAction } from "./extension/refreshPolicy";
+import { getBranchHistoryCache, getBranchHistoryCacheEpoch, isBranchHistoryCacheEpochCurrent, markBranchHistoryDirty, setBranchHistoryCache } from "./extension/branchHistoryCache";
+import {
+  shouldEnrichRemoteDefaultsAfterAction,
+  shouldInvalidateRemoteDefaultBranches,
+  shouldMarkBranchHistoryDirty,
+  shouldReloadBranchHistoryAfterAction,
+  shouldReloadCommitsAfterAction
+} from "./extension/refreshPolicy";
 import { debug, error as logError, info, initializeLogger, isDebugEnabled, showLogs, warn } from "./logger";
 import {
   DEFAULT_DATE_RANGE,
@@ -59,6 +66,12 @@ const lastBranchHistoryRequest: { dateRange: DateRange } = {
 };
 
 let activeWebviewTab: WebviewTab = "graph";
+let commitGraphDirty = false;
+let commitGraphDirtyEpoch = 0;
+
+type LoadRemotesOptions = {
+  enrichDefaults?: boolean;
+};
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = initializeLogger(context);
@@ -285,6 +298,15 @@ async function handleWebviewMessage(message: WebviewMessage): Promise<void> {
     case "tab-changed":
       activeWebviewTab = message.tab;
       debug("webview tab changed", { tab: message.tab });
+      if (message.tab === "graph" && commitGraphDirty) {
+        debug("loadCommits on graph tab entry; graph was dirty");
+        void loadCommits(
+          lastCommitRequest.dateRange,
+          lastCommitRequest.page,
+          lastCommitRequest.searchText,
+          lastCommitRequest.scope
+        );
+      }
       return;
     case "execute-action":
       await runCommitAction(message.action, message.commitHash);
@@ -357,11 +379,16 @@ async function loadInitialDataInner(): Promise<void> {
       return;
     }
 
+    markBranchHistoryDirty(root);
     await Promise.all([
       loadCommits(lastCommitRequest.dateRange, lastCommitRequest.page, lastCommitRequest.searchText, lastCommitRequest.scope, root),
       loadBranches(root),
       loadRemotes(root)
     ]);
+    if (activeWebviewTab === "history") {
+      debug("branch history reload after full data refresh; history tab active");
+      await loadBranchHistory(lastBranchHistoryRequest.dateRange, root);
+    }
   } catch (error) {
     postError(error);
   } finally {
@@ -369,7 +396,9 @@ async function loadInitialDataInner(): Promise<void> {
   }
 }
 
+
 async function loadCommits(dateRange: DateRange, page: number, searchText: string, scope: HistoryScope, knownRoot?: string): Promise<void> {
+  const epochAtStart = commitGraphDirtyEpoch;
   debug("loadCommits start", { dateRange, page, searchTextLength: searchText.length, scope, knownRoot });
   post({ type: "loading", loading: true, scope: "commits" });
   try {
@@ -381,6 +410,9 @@ async function loadCommits(dateRange: DateRange, page: number, searchText: strin
 
     const result = await getCommits(root, dateRange, page, PAGE_SIZE, searchText, scope);
     post({ type: "commits-data", commits: result.commits, pagination: result.pagination });
+    if (commitGraphDirtyEpoch === epochAtStart) {
+      commitGraphDirty = false;
+    }
     info("commits loaded", {
       count: result.commits.length,
       total: result.pagination.totalItems,
@@ -433,16 +465,23 @@ async function loadCommitDetails(commitHash: string, knownRoot?: string): Promis
   }
 }
 
-async function loadRemotes(knownRoot?: string): Promise<void> {
-  debug("loadRemotes start", { knownRoot });
+async function loadRemotes(knownRoot?: string, options?: LoadRemotesOptions): Promise<void> {
+  const enrichDefaults = options?.enrichDefaults !== false;
+  debug("loadRemotes start", { knownRoot, enrichDefaults });
   post({ type: "loading", loading: true, scope: "remotes" });
   try {
     const root = knownRoot ?? (await resolveRepositoryRoot());
     const remotes = root ? await getRemotes(root) : [];
-    lastRemotes = remotes;
-    post({ type: "remotes-data", remotes });
-    info("remotes loaded", { count: remotes.length });
-    if (root) {
+    const remotesWithDefaults = enrichDefaults
+      ? remotes
+      : remotes.map((remote) => {
+          const previous = lastRemotes.find((candidate) => candidate.name === remote.name);
+          return previous?.defaultBranch ? { ...remote, defaultBranch: previous.defaultBranch } : remote;
+        });
+    lastRemotes = remotesWithDefaults;
+    post({ type: "remotes-data", remotes: remotesWithDefaults });
+    info("remotes loaded", { count: remotesWithDefaults.length, enrichDefaults });
+    if (root && enrichDefaults) {
       void enrichRemoteDefaultsInBackground(root, remotes);
     }
   } catch (error) {
@@ -499,15 +538,61 @@ async function loadBranchHistory(dateRange: DateRange, knownRoot?: string): Prom
       return;
     }
     if (!root) {
-      post({ type: "branch-history-data", lifecycles: [], defaultBranch: "main", remoteMains: [], window: { totalDays: 7, startDate: "", endDate: "" } });
+      if (activeWebviewTab === "history" && isCurrentBranchHistoryLoad(generation)) {
+        post({
+          type: "branch-history-data",
+          lifecycles: [],
+          defaultBranch: "main",
+          remoteMains: [],
+          window: { totalDays: 7, startDate: "", endDate: "" }
+        });
+      }
       return;
     }
 
+    const cached = getBranchHistoryCache(root, dateRange);
+    if (cached) {
+      debug("branch history cache hit", { generation, dateRange });
+      if (activeWebviewTab === "history" && isCurrentBranchHistoryLoad(generation)) {
+        post({
+          type: "branch-history-data",
+          lifecycles: cached.lifecycles,
+          defaultBranch: cached.defaultBranch,
+          remoteMains: cached.remoteMains,
+          window: cached.window
+        });
+        info("branch history loaded", {
+          count: cached.lifecycles.length,
+          defaultBranch: cached.defaultBranch,
+          remoteMainCount: cached.remoteMains.length,
+          generation,
+          cached: true
+        });
+      } else {
+        debug("branch history post skipped; tab inactive", { generation, tab: activeWebviewTab });
+      }
+      return;
+    }
+
+    const cacheEpoch = getBranchHistoryCacheEpoch(root);
     const payload = await getBranchLifecycles(root, dateRange);
     if (!isCurrentBranchHistoryLoad(generation)) {
       debug("loadBranchHistory result skipped; superseded", { generation });
       return;
     }
+
+    if (!isBranchHistoryCacheEpochCurrent(root, cacheEpoch)) {
+      debug("branch history result discarded; cache epoch changed", { generation, cacheEpoch, currentEpoch: getBranchHistoryCacheEpoch(root) });
+      return;
+    }
+
+    setBranchHistoryCache(root, dateRange, payload);
+
+    if (activeWebviewTab !== "history") {
+      debug("branch history post skipped; tab inactive", { generation, tab: activeWebviewTab });
+      return;
+    }
+
     post({
       type: "branch-history-data",
       lifecycles: payload.lifecycles,
@@ -579,29 +664,39 @@ async function runBranchAction(
     post({ type: "action-result", ...result });
     showActionNotification(result);
     if (result.success) {
-      invalidateRemoteDataCaches(root);
+      invalidateRemoteDataCaches(root, { defaultBranches: shouldInvalidateRemoteDefaultBranches(action) });
       const repo = await getRepositoryState(root);
       repo.lastFetched = new Date().toISOString();
       post({ type: "repo-state", repo });
-      await Promise.all([loadBranches(root), loadRemotes(root)]);
+      await Promise.all([
+        loadBranches(root),
+        loadRemotes(root, { enrichDefaults: shouldEnrichRemoteDefaultsAfterAction(action) })
+      ]);
       const currentTab = activeWebviewTab;
       if (shouldReloadBranchHistoryAfterAction(actionTab, currentTab)) {
+        markBranchHistoryDirty(root);
         await loadBranchHistory(lastBranchHistoryRequest.dateRange, root);
+      } else if (shouldMarkBranchHistoryDirty(action)) {
+        markBranchHistoryDirty(root);
+        debug("branch history marked dirty", { actionTab, currentTab, action });
       } else {
         debug("loadBranchHistory skipped; history tab inactive", { actionTab, currentTab, action });
       }
-      if (
-        action === "pull" ||
-        action === "push" ||
-        action === "delete" ||
-        action === "delete-remote" ||
-        action === "set-upstream" ||
-        action === "add-upstream" ||
-        action === "set-default-upstream" ||
-        action === "fetch" ||
-        action === "prune-stale"
-      ) {
-        await loadCommits(lastCommitRequest.dateRange, lastCommitRequest.page, lastCommitRequest.searchText, lastCommitRequest.scope, root);
+      if (shouldReloadCommitsAfterAction(action)) {
+        if (activeWebviewTab === "graph") {
+          commitGraphDirty = false;
+          await loadCommits(
+            lastCommitRequest.dateRange,
+            lastCommitRequest.page,
+            lastCommitRequest.searchText,
+            lastCommitRequest.scope,
+            root
+          );
+        } else {
+          commitGraphDirty = true;
+          commitGraphDirtyEpoch += 1;
+          debug("loadCommits deferred; graph tab inactive", { actionTab, currentTab: activeWebviewTab, action });
+        }
       }
     }
   } catch (error) {

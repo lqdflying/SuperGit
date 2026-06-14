@@ -118,4 +118,15 @@ describe("invalidateRemoteDataCaches", () => {
     await expect(resolveRemoteDefaultBranch("/repo", "origin")).resolves.toBe("develop");
     expect(runGitMock).toHaveBeenCalledTimes(2);
   });
+
+  it("preserves default-branch cache when defaultBranches is false", async () => {
+    runGitMock.mockResolvedValueOnce(ok("refs/remotes/origin/main\n"));
+    await expect(resolveRemoteDefaultBranch("/repo", "origin")).resolves.toBe("main");
+    expect(runGitMock).toHaveBeenCalledTimes(1);
+
+    invalidateRemoteDataCaches("/repo", { defaultBranches: false });
+
+    await expect(resolveRemoteDefaultBranch("/repo", "origin")).resolves.toBe("main");
+    expect(runGitMock).toHaveBeenCalledTimes(1);
+  });
 });

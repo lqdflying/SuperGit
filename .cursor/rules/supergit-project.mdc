@@ -34,6 +34,9 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 | Parsing | `src/git/parser.ts` |
 | Read models | `src/git/commands.ts` |
 | Branch history | `src/git/branch-lifecycle.ts`, `src/git/branch-status.ts` |
+| Refresh policy | `src/extension/refreshPolicy.ts` |
+| History cache | `src/extension/branchHistoryCache.ts` |
+| History gen guard | `src/extension/branchHistoryLoad.ts` |
 | Write actions | `src/git/actions.ts` |
 | Diff provider | `src/git/diffProvider.ts` |
 | Webview React | `src/webview/main.tsx`, `App.tsx`, `components/` |
@@ -51,8 +54,11 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 - `git pull --ff-only origin <branch>` updates the **checked-out** branch, not `<branch>` when another branch is selected
 - Non-checked-out pull: `git fetch <remote> <branch>:<branch>` (fast-forward only; no `+`)
 - Checked-out pull: `git pull --ff-only <remote> <branch>`
-- After successful branch actions in `runBranchAction`, refresh in order: `Promise.all([loadBranches, loadRemotes])` → **`loadBranchHistory` only when action or current tab is History** (`shouldReloadBranchHistoryAfterAction`) → `loadCommits` when refs/history changed (includes **delete-remote**, **fetch**, **prune-stale**)
-- **`invalidateRemoteDataCaches(root)`** after fetch/prune/actions (remotes list + per-remote default-branch cache)
+- After successful branch actions in `runBranchAction`, refresh per `src/extension/refreshPolicy.ts` classifiers:
+  - `Promise.all([loadBranches(root), loadRemotes(root, { enrichDefaults })])`
+  - History: inline `loadBranchHistory` when tab active, else `markBranchHistoryDirty(root)` only
+  - Commits: inline `loadCommits` when Graph tab active, else set `commitGraphDirty` + bump epoch
+- **`invalidateRemoteDataCaches(root, { defaultBranches? })`** — full invalidation for `fetch`/`prune-stale`/`delete-remote`; list-only (`defaultBranches: false`) for safe actions like `push`/`pull`/`add-upstream`/`set-upstream`/`set-default-upstream`/`delete`
 - **Fetch and Set Upstream** when remote branch exists but not fetched: use explicit refspec `refs/heads/<branch>:refs/remotes/<remote>/<branch>` before `git branch --set-upstream-to` (plain `git fetch remote branch` may only update FETCH_HEAD)
 - **Set upstream / Push and Set Upstream:** multi-remote repos use extension-host `showQuickPick` (not manual input); remote branch defaults to local branch name (or explicit `remoteBranchName` from selection)
 - **Multi-remote tracking:** Git allows one **default** upstream per branch. `add-upstream` push/fetch adds `refs/remotes/<remote>/<branch>` **without** `-u` or changing default. `set-default-upstream` runs `git branch --set-upstream-to` for a selected existing tracking ref. `getBranches()` already lists all local remote-tracking refs; configured upstream row shows **`default`** badge in Tracking.

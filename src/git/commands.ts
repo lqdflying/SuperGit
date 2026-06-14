@@ -64,10 +64,17 @@ export function clearRemotesCache(cwd?: string): void {
   remotesInflight.delete(cwd);
 }
 
-/** Invalidate remotes list cache and per-remote default-branch cache after fetch/prune or ref changes. */
-export function invalidateRemoteDataCaches(cwd?: string): void {
+export interface InvalidateRemoteDataCachesOptions {
+  /** When false, preserve per-remote default-branch cache (safe after local-only branch actions). */
+  defaultBranches?: boolean;
+}
+
+/** Invalidate remotes list cache and optionally per-remote default-branch cache after fetch/prune or ref changes. */
+export function invalidateRemoteDataCaches(cwd?: string, options?: InvalidateRemoteDataCachesOptions): void {
   clearRemotesCache(cwd);
-  clearRemoteDefaultBranchCache(cwd);
+  if (options?.defaultBranches !== false) {
+    clearRemoteDefaultBranchCache(cwd);
+  }
 }
 
 /** Clear upstream on local branches whose remote-tracking ref is missing (often after fetch --prune). */

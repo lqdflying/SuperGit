@@ -13,6 +13,7 @@ const resolveRemoteDefaultBranchMock = vi.hoisted(() => vi.fn());
 const isBranchMergedIntoMock = vi.hoisted(() => vi.fn());
 
 const showQuickPickMock = vi.hoisted(() => vi.fn());
+const getConfigurationMock = vi.hoisted(() => vi.fn(() => ({ get: vi.fn((_key: string, defaultValue: unknown) => defaultValue) })));
 
 vi.mock("vscode", () => ({
   env: {
@@ -24,6 +25,9 @@ vi.mock("vscode", () => ({
     showWarningMessage: showWarningMessageMock,
     showInputBox: showInputBoxMock,
     showQuickPick: showQuickPickMock
+  },
+  workspace: {
+    getConfiguration: getConfigurationMock
   }
 }));
 
@@ -110,6 +114,7 @@ describe("executeBranchAction", () => {
     vi.clearAllMocks();
     showWarningMessageMock.mockResolvedValue("Run");
     showInputBoxMock.mockResolvedValue("origin/main");
+    getConfigurationMock.mockReturnValue({ get: vi.fn((_key: string, defaultValue: unknown) => defaultValue) });
     getCurrentBranchMock.mockResolvedValue("main");
     getRemotesMock.mockResolvedValue([{ name: "origin", url: "url", colorIndex: 0 }]);
     resolveDefaultBranchMock.mockResolvedValue("main");
@@ -472,6 +477,42 @@ describe("executeBranchAction", () => {
       expect.objectContaining({ title: "Add Remote Tracking" })
     );
     expect(runGitMock).toHaveBeenCalledWith(["push", "upstream", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("add-upstream does not re-check the chosen remote ref after the picker path", async () => {
+    showWarningMessageMock.mockResolvedValue("Run");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return fail("unknown ref");
+      }
+      if (args[0] === "ls-remote") {
+        return ok("");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "add-upstream", "feature/x", "upstream");
+    const revParseCalls = runGitMock.mock.calls.filter((args) => args[0][0] === "rev-parse" && args[0][1] === "--verify");
+    expect(revParseCalls).toHaveLength(1);
+    expect(revParseCalls[0]?.[0]).toEqual(["rev-parse", "--verify", "refs/remotes/upstream/feature/x"]);
+  });
+
+  it("add-upstream skips ls-remote when superGit.addUpstream.skipRemoteProbe is enabled", async () => {
+    getConfigurationMock.mockReturnValue({
+      get: vi.fn((key: string, defaultValue: unknown) => (key === "addUpstream.skipRemoteProbe" ? true : defaultValue))
+    });
+    showWarningMessageMock.mockResolvedValue("Run");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return fail("unknown ref");
+      }
+      if (args[0] === "ls-remote") {
+        return ok("abc123\trefs/heads/feature/x\n");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "add-upstream", "feature/x", "upstream");
+    expect(runGitMock).not.toHaveBeenCalledWith(["ls-remote", "--heads", "upstream", "feature/x"], "/repo", { timeout: 120_000 });
+    expect(runGitMock).toHaveBeenCalledWith(["push", "upstream", "feature/x"], "/repo", { timeout: 120_000 });
   });
 
   it("set-default-upstream requires a selected remote", async () => {
