@@ -1,11 +1,12 @@
-import type { BranchAction, BranchLifecycle } from "../../../shared/types";
+import type { BranchLifecycle } from "../../../shared/types";
 import type { ThemeColors } from "../../../shared/themeColors";
 import { CurrentBadge } from "../badges";
 import { useThemeColors } from "../../ThemeProvider";
-import { branchColor, formatHistoryDayLabel, remoteColor } from "../../utils";
+import { branchColor, remoteColor } from "../../utils";
 import { GhostTrack } from "./GhostTrack";
 import { RemoteMarker } from "./RemoteMarker";
-import { BAR_HEIGHT, DIV_GAP, DOT_RADIUS, LABEL_WIDTH, LANE_HEIGHT, LANE_HEIGHT_DIVERGED, MAIN_DOT_RADIUS } from "./constants";
+import { BAR_HEIGHT, LABEL_WIDTH, LANE_HEIGHT, LANE_HEIGHT_DIVERGED } from "./constants";
+import { commitDotRadius, computeIdleDays } from "./timelineLayout";
 
 function statusColor(status: BranchLifecycle["status"], severity: BranchLifecycle["severity"], theme: ThemeColors): string {
   if (status === "active") {
@@ -31,6 +32,10 @@ export function BranchLane({
   rangeStart,
   totalDays,
   todayDay,
+  dayWidth,
+  svgWidth,
+  showHashLabels,
+  showRemoteMarkers,
   ghostCommitDays,
   lx,
   onSelect,
@@ -47,8 +52,12 @@ export function BranchLane({
   rangeStart: number;
   totalDays: number;
   todayDay: number;
+  dayWidth: number;
+  svgWidth: number;
+  showHashLabels: boolean;
+  showRemoteMarkers: boolean;
   ghostCommitDays: number[];
-  lx: (day: number) => number;
+  lx: (day: number, rangeStart?: number) => number;
   onSelect: () => void;
   onHover: () => void;
   onLeave: () => void;
@@ -63,11 +72,13 @@ export function BranchLane({
   const lastCommitX = lx(Math.max(lastCommitDay, rangeStart));
   const showGhost = branch.status === "diverged" && !isMain;
   const hashEndX = branch.stale ? lastCommitX : endX;
+  const idleDays = computeIdleDays(todayDay, lastCommitDay);
+  const dotRadius = commitDotRadius(dayWidth, isMain);
 
   return (
     <g onClick={onSelect} onMouseEnter={onHover} onMouseLeave={onLeave} style={{ cursor: "pointer" }}>
       {(isSelected || isHovered) && (
-        <rect x={0} y={laneTop - 2} width={LABEL_WIDTH + totalDays * 30 + 60} height={laneHeight} fill={isSelected ? theme.selection : theme.hover} />
+        <rect x={0} y={laneTop - 2} width={svgWidth} height={laneHeight} fill={isSelected ? theme.selection : theme.hover} />
       )}
       {isSelected && <rect x={0} y={laneTop - 2} width={3} height={laneHeight} fill={brC} rx={1} />}
 
@@ -131,7 +142,7 @@ export function BranchLane({
             key={day}
             cx={lx(day)}
             cy={barY + BAR_HEIGHT / 2}
-            r={isMain ? MAIN_DOT_RADIUS : DOT_RADIUS}
+            r={dotRadius}
             fill={branch.status === "merged" ? theme.historyMerged : brC}
             stroke={theme.bg0}
             strokeWidth={1.5}
@@ -139,22 +150,27 @@ export function BranchLane({
           />
         ))}
 
-      <text x={startX} y={barY - 5} textAnchor="middle" fontSize={8.5} fill={theme.fgDim} opacity={0.92}>
-        {branch.hashStart}
-      </text>
-      <text
-        x={hashEndX}
-        y={barY - 5}
-        textAnchor="middle"
-        fontSize={8.5}
-        fontWeight={600}
-        fill={branch.status === "diverged" ? (branch.severity === "mild" ? theme.historyWarn : theme.historyDanger) : branch.status === "merged" ? theme.historyMerged : theme.fgDim}
-        opacity={0.95}
-      >
-        {branch.hashEnd}
-      </text>
+      {showHashLabels && (
+        <>
+          <text x={startX} y={barY - 5} textAnchor="middle" fontSize={8.5} fill={theme.fgDim} opacity={0.92}>
+            {branch.hashStart}
+          </text>
+          <text
+            x={hashEndX}
+            y={barY - 5}
+            textAnchor="middle"
+            fontSize={8.5}
+            fontWeight={600}
+            fill={branch.status === "diverged" ? (branch.severity === "mild" ? theme.historyWarn : theme.historyDanger) : branch.status === "merged" ? theme.historyMerged : theme.fgDim}
+            opacity={0.95}
+          >
+            {branch.hashEnd}
+          </text>
+        </>
+      )}
 
-      {!branch.remoteOnly &&
+      {showRemoteMarkers &&
+        !branch.remoteOnly &&
         branch.remotes.map((remote) => (
           <RemoteMarker key={remote.name} remote={remote} barY={barY} remoteX={lx(remote.pushDay)} endX={endX} rangeStart={rangeStart} theme={theme} />
         ))}
@@ -170,6 +186,8 @@ export function BranchLane({
           endX={endX}
           ghostCommitDays={ghostCommitDays}
           rangeStart={rangeStart}
+          dayWidth={dayWidth}
+          showHashLabels={showHashLabels}
           lx={lx}
           theme={theme}
         />
@@ -186,6 +204,15 @@ export function BranchLane({
           opacity={0.4}
         />
       )}
+
+      {branch.stale && showHashLabels && (
+        <g>
+          <rect x={endX + 8} y={barY - 1} width={40} height={BAR_HEIGHT + 2} rx={5} fill={theme.historyStale} fillOpacity={0.15} stroke={theme.historyStale} strokeOpacity={0.3} strokeWidth={0.5} />
+          <text x={endX + 28} y={barY + BAR_HEIGHT / 2 + 3} textAnchor="middle" fontSize={8.5} fontWeight={600} fill={theme.historyStale}>
+            {idleDays}d idle
+          </text>
+        </g>
+      )}
     </g>
   );
 }
@@ -195,8 +222,4 @@ export function laneHeightForBranch(branch: BranchLifecycle, defaultBranch: stri
     return LANE_HEIGHT_DIVERGED;
   }
   return LANE_HEIGHT;
-}
-
-export function formatRangeLabel(startDate: string, endDate: string): string {
-  return `${formatHistoryDayLabel(startDate)} — ${formatHistoryDayLabel(endDate)}`;
 }

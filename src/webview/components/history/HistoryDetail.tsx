@@ -1,14 +1,17 @@
-import type { BranchAction, BranchLifecycle } from "../../../shared/types";
+import type { BranchAction, BranchHistoryWindow, BranchLifecycle } from "../../../shared/types";
 import { useThemeColors } from "../../ThemeProvider";
 import { branchColor, formatHistoryDayLabel, remoteColor } from "../../utils";
+import { computeIdleDays } from "./timelineLayout";
 
 export function HistoryDetail({
   branch,
   defaultBranch,
+  window,
   onBranchAction
 }: {
   branch: BranchLifecycle;
   defaultBranch: string;
+  window: BranchHistoryWindow;
   onBranchAction: (action: BranchAction, branchName?: string, remote?: string) => void;
 }) {
   const theme = useThemeColors();
@@ -54,6 +57,10 @@ export function HistoryDetail({
   if (!branch.remoteOnly) {
     actions.push({ label: "Prune stale refs", action: "prune-stale" });
   }
+
+  const lastCommitDay = branch.commitDays[branch.commitDays.length - 1] ?? branch.endDay;
+  const idleDays = computeIdleDays(window.totalDays - 1, lastCommitDay);
+  const lastActiveLabel = branch.commitDays.length > 0 ? `${idleDays}d ago` : "—";
 
   return (
     <aside className="branch-history-detail">
@@ -151,6 +158,7 @@ export function HistoryDetail({
         <div className="branch-history-metric-grid">
           <MetricCell label="Commits" value={String(branch.totalCommits)} />
           <MetricCell label="Age" value={`${branch.endDay - branch.startDay + 1}d`} />
+          <MetricCell label="Last active" value={lastActiveLabel} color={branch.stale ? theme.historyWarn : undefined} />
           <MetricCell label="Status" value={branch.remoteOnly ? "Remote-only" : branch.status} color={statusColor} />
         </div>
       </section>

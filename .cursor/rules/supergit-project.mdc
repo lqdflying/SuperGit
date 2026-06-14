@@ -61,6 +61,7 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 ## Agent policy
 
 - Read only this repo's guidance; do not import unrelated project memories
+- **UI/design specs:** update `.cursor/rules/supergit-*.mdc` only — do **not** add `Design/` mockups, JSX prototypes, or standalone coding proposals; the retired `Design/` folder must not be recreated
 - Do not infer log events not visible in summaries; add diagnostics instead
 - Before claiming refresh/reload fixes, verify log **counts** per `supergit-refresh-coordination.mdc` (not just presence of one skip/coalesce line)
 - Search VS Code Server logs narrowly by session and extension name

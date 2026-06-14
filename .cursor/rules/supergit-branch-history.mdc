@@ -60,13 +60,49 @@ Messages/types: `BranchLifecycle`, `BranchHistoryPayload`, loading scope `branch
 |---------|------|
 | Label column | `220px` (`LABEL_W`) |
 | Detail panel | `320px` fixed (no splitter v1) |
-| Day column | `30px` (`DAY_W`) |
+| Right padding | `40px` (`PAD_R`) |
+| Day column | **dynamic** — `DAY_W = (containerW - LABEL_W - PAD_R) / totalDays` via `ResizeObserver` |
 | Normal lane | `72px` |
 | Diverged lane | `96px` (`72 + DIV_GAP(14) + 10`) |
 | Bar height | `8px` |
-| Commit dot | `3.5px` (`3px` on default branch) |
+| Commit dot | scales with `DAY_W` — `max(2, min(3.5, DAY_W * 0.15))` (`3px` max on default branch) |
 
-## SVG rules — DO
+**No horizontal scrollbar.** Timeline SVG width equals measured container width; outer `.branch-history-timeline` uses `overflow: hidden`, inner scroll is vertical-only.
+
+### Smart detail hiding (by `DAY_W`)
+
+| Threshold | Effect |
+|-----------|--------|
+| `DAY_W ≤ 12` | Hide hash labels, LCA text, stale idle pill |
+| `DAY_W ≤ 15` | Hide remote position markers |
+| `DAY_W < 8` | Weekly labels ~monthly |
+| `DAY_W < 15` | Weekly labels ~bi-weekly |
+| `DAY_W < 25` | Weekly labels weekly |
+| else | Label every Monday + first day |
+
+Helpers: `src/webview/components/history/timelineLayout.ts`, hook `useTimelineLayout.ts`.
+
+### Narrow pane safety
+
+When `containerW < MIN_TIMELINE_WIDTH` (260px = `LABEL_W + PAD_R`), `computeTimelineTimeWidth()` clamps to `0` so `dayWidth` is never negative. Lanes compress into the label column until the pane widens (detail panel is fixed `320px`; timeline is `flex: 1`).
+
+## Legend (`BranchHistoryTab`)
+
+Status rows: Active, Diverged, Merged, Remote-only. Visual key (all via `useThemeColors()` / CSS classes — no hardcoded hex):
+
+- **stale** tag sample (`.branch-history-stale-tag`)
+- Filled commit dot + hollow main-ghost dot
+- Main path swatch (default branch color, low opacity)
+- Hash pill sample (`.branch-history-legend-hash`)
+- Remote triangle (`remoteColor()`)
+
+## Lane stale idle pill
+
+When `branch.stale` and `DAY_W > 12`: SVG pill at `endX + 8` with `{idleDays}d idle` (`idleDays = todayDay - lastCommitDay`).
+
+## Detail panel metrics
+
+2×2 grid: Commits, Age, **Last active** (`Nd ago`), Status. Warn color on Last active uses **`branch.stale`** from the Git layer — do not duplicate `STALE_THRESHOLD_DAYS` in the webview.
 
 - Time flows left→right; default branch topmost with thicker bar.
 - Hash labels at both bar ends; remote triangle flags only when `behindLocal > 0`.
@@ -92,8 +128,10 @@ Messages/types: `BranchLifecycle`, `BranchHistoryPayload`, loading scope `branch
 | File | Role |
 |------|------|
 | `BranchHistoryTab.tsx` | Summary strip, legend, selection, detail |
+| `timelineLayout.ts` | Pure layout math (DAY_W, thresholds, dot radii) |
+| `useTimelineLayout.ts` | `ResizeObserver` + container width state |
 | `TimelineSvg.tsx` | Grid + lane layout |
-| `BranchLane.tsx` | Label, bar, dots, stale pill |
+| `BranchLane.tsx` | Label, bar, dots, stale idle pill |
 | `GhostTrack.tsx` | Diverged ghost + LCA connector |
 | `RemoteMarker.tsx` | Triangle + unpushed bracket |
 | `HistoryDetail.tsx` | Metrics, remote cards, quick actions |
@@ -119,4 +157,5 @@ Same `execute-branch-action` as Tracking — always pass `branchName` + `remote`
 
 - `branch-status.test.ts` — TC-BH01..BH08 + `generateDescription`
 - `branch-lifecycle.test.ts` — TC-BH09..BH13
+- `timeline-layout.test.ts` — DAY_W, thresholds, dot radii, narrow-pane clamp
 - Mock pitfall: `mockResolvedValueOnce` queue leaks — `mockReset()` in `beforeEach`

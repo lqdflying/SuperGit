@@ -2,6 +2,7 @@ import type { BranchLifecycle } from "../../../shared/types";
 import type { ThemeColors } from "../../../shared/themeColors";
 import { branchColor } from "../../utils";
 import { BAR_HEIGHT, DIV_GAP, LABEL_WIDTH } from "./constants";
+import { ghostDotRadius } from "./timelineLayout";
 
 export function GhostTrack({
   branch,
@@ -13,6 +14,8 @@ export function GhostTrack({
   endX,
   ghostCommitDays,
   rangeStart,
+  dayWidth,
+  showHashLabels,
   lx,
   theme
 }: {
@@ -25,12 +28,15 @@ export function GhostTrack({
   endX: number;
   ghostCommitDays: number[];
   rangeStart: number;
-  lx: (day: number) => number;
+  dayWidth: number;
+  showHashLabels: boolean;
+  lx: (day: number, rangeStart?: number) => number;
   theme: ThemeColors;
 }) {
   const mainGhostY = barY + BAR_HEIGHT + DIV_GAP;
   const mainC = branchColor(defaultBranchColorIndex, theme);
   const behindColor = branch.behindMain > 12 ? theme.historyDanger : theme.historyWarn;
+  const ghostRadius = ghostDotRadius(dayWidth);
 
   return (
     <g>
@@ -41,10 +47,10 @@ export function GhostTrack({
       {ghostCommitDays
         .filter((day) => day >= rangeStart)
         .map((day) => (
-          <circle key={day} cx={lx(day)} cy={mainGhostY + BAR_HEIGHT / 2} r={2.5} fill="none" stroke={mainC} strokeWidth={1.2} opacity={0.35} />
+          <circle key={day} cx={lx(day)} cy={mainGhostY + BAR_HEIGHT / 2} r={ghostRadius} fill="none" stroke={mainC} strokeWidth={1.2} opacity={0.35} />
         ))}
       <line x1={lcaX} y1={barY + BAR_HEIGHT} x2={lcaX} y2={mainGhostY} stroke={theme.fgDim} strokeWidth={1} strokeDasharray="2,2" opacity={0.55} />
-      {branch.hashLca && (
+      {showHashLabels && branch.hashLca && (
         <text x={lcaX - 4} y={barY + BAR_HEIGHT + (mainGhostY - barY - BAR_HEIGHT) / 2 + 3} textAnchor="end" fontSize={7.5} fill={theme.fgDim} opacity={0.9}>
           LCA {branch.hashLca}
         </text>

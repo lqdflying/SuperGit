@@ -3,7 +3,8 @@ import type { BranchLifecycle, BranchHistoryWindow, RemoteMainPosition } from ".
 import { useThemeColors } from "../../ThemeProvider";
 import { formatHistoryDayLabel } from "../../utils";
 import { BranchLane, laneHeightForBranch } from "./BranchLane";
-import { DAY_WIDTH, LABEL_WIDTH } from "./constants";
+import { LABEL_WIDTH } from "./constants";
+import { computeLabelEveryNDays, shouldShowWeekLabel } from "./timelineLayout";
 
 export function TimelineSvg({
   lifecycles,
@@ -12,6 +13,11 @@ export function TimelineSvg({
   window,
   selectedKey,
   hoveredKey,
+  dayWidth,
+  svgWidth,
+  lx,
+  showHashLabels,
+  showRemoteMarkers,
   onSelect,
   onHover,
   onLeave
@@ -22,6 +28,11 @@ export function TimelineSvg({
   window: BranchHistoryWindow;
   selectedKey: string;
   hoveredKey: string | null;
+  dayWidth: number;
+  svgWidth: number;
+  lx: (day: number, rangeStart?: number) => number;
+  showHashLabels: boolean;
+  showRemoteMarkers: boolean;
   onSelect: (key: string) => void;
   onHover: (key: string) => void;
   onLeave: () => void;
@@ -30,8 +41,7 @@ export function TimelineSvg({
   const totalDays = window.totalDays;
   const todayDay = totalDays - 1;
   const rangeStart = 0;
-  const timeW = totalDays * DAY_WIDTH;
-  const lx = (day: number) => LABEL_WIDTH + (day - rangeStart) * DAY_WIDTH + DAY_WIDTH / 2;
+  const labelEveryN = computeLabelEveryNDays(dayWidth);
 
   const defaultBranchLifecycle = lifecycles.find((branch) => branch.name === defaultBranch && !branch.remoteOnly);
   const ghostCommitDays = useMemo(() => {
@@ -52,25 +62,34 @@ export function TimelineSvg({
   const markers = useMemo(() => {
     const start = new Date(window.startDate);
     const items: Array<{ day: number; label: string | null; isWeek: boolean; isToday: boolean }> = [];
+    let weekIndex = 0;
     for (let day = 0; day < totalDays; day += 1) {
       const date = new Date(start);
       date.setDate(start.getDate() + day);
       const isMonday = date.getDay() === 1;
       const isFirst = day === 0;
+      const isWeek = isMonday || isFirst;
+      let label: string | null = null;
+      if (isWeek) {
+        weekIndex += 1;
+        if (shouldShowWeekLabel(labelEveryN, weekIndex, isFirst)) {
+          label = formatHistoryDayLabel(date.toISOString());
+        }
+      }
       items.push({
         day,
-        label: isMonday || isFirst ? formatHistoryDayLabel(date.toISOString()) : null,
-        isWeek: isMonday || isFirst,
+        label,
+        isWeek,
         isToday: day === todayDay
       });
     }
     return items;
-  }, [totalDays, todayDay, window.startDate]);
+  }, [labelEveryN, totalDays, todayDay, window.startDate]);
 
   return (
-    <svg width={LABEL_WIDTH + timeW + 60} height={svgH} className="branch-history-svg">
+    <svg width={svgWidth} height={svgH} className="branch-history-svg">
       {markers.map((marker) => {
-        const x = LABEL_WIDTH + marker.day * DAY_WIDTH + DAY_WIDTH / 2;
+        const x = LABEL_WIDTH + marker.day * dayWidth + dayWidth / 2;
         return (
           <g key={marker.day}>
             <line
@@ -114,6 +133,10 @@ export function TimelineSvg({
             rangeStart={rangeStart}
             totalDays={totalDays}
             todayDay={todayDay}
+            dayWidth={dayWidth}
+            svgWidth={svgWidth}
+            showHashLabels={showHashLabels}
+            showRemoteMarkers={showRemoteMarkers}
             ghostCommitDays={ghostCommitDays.filter((day) => day > branch.lastCommonAncestorDay)}
             lx={lx}
             onSelect={() => onSelect(key)}

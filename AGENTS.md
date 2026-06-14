@@ -5,7 +5,7 @@ These notes capture the practical lessons from building and debugging the SuperG
 ## Project Intent
 
 - Build a VS Code extension named `SuperGit`.
-- **Source of truth for product behavior/UI:** `.cursor/rules/supergit-*.mdc` (not the retired `Design/` folder).
+- **Source of truth for product behavior/UI:** `.cursor/rules/supergit-*.mdc` only — do not add or reference a `Design/` folder (retired; update scoped rules instead).
   - Commit graph / swimlanes: `supergit-commit-graph.mdc`
   - Webview / CSP / tabs: `supergit-webview.mdc`
   - Branch history: `supergit-branch-history.mdc`

@@ -1970,8 +1970,32 @@ button {
 
 .branch-history-timeline {
   flex: 1;
-  overflow: auto;
   min-width: 0;
+  overflow: hidden;
+}
+
+.branch-history-timeline-scroll {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.branch-history-svg {
+  display: block;
+  max-width: 100%;
+}
+
+.branch-history-legend-icon {
+  flex-shrink: 0;
+}
+
+.branch-history-legend-hash {
+  font-size: 10px;
+  font-family: var(--mono-family, monospace);
+  background: var(--sg-bg3);
+  padding: 0 4px;
+  border-radius: 3px;
 }
 
 .branch-history-detail {

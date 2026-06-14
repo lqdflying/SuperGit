@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { BranchAction, BranchHistoryWindow, BranchLifecycle, DateRange } from "../../../shared/types";
 import { DateRangeBar } from "../graph/DateRangeBar";
 import { useThemeColors } from "../../ThemeProvider";
-import { formatHistoryDayLabel, sortBranchLifecycles } from "../../utils";
+import { branchColor, formatHistoryDayLabel, remoteColor, sortBranchLifecycles } from "../../utils";
 import { branchKey, TimelineSvg } from "./TimelineSvg";
 import { HistoryDetail } from "./HistoryDetail";
+import { useTimelineLayout } from "./useTimelineLayout";
 
 export function BranchHistoryTab({
   lifecycles,
@@ -38,6 +39,10 @@ export function BranchHistoryTab({
   const visible = useMemo(() => sorted.filter((branch) => branch.endDay >= 0), [sorted]);
 
   const defaultBranchColorIndex = lifecycles.find((branch) => branch.name === defaultBranch && !branch.remoteOnly)?.colorIndex ?? 0;
+  const mainColor = branchColor(defaultBranchColorIndex, theme);
+  const remoteSampleColor = remoteColor(0, theme);
+
+  const { containerRef, dayWidth, svgWidth, lx, showHashLabels, showRemoteMarkers } = useTimelineLayout(window.totalDays);
 
   const [selectedKey, setSelectedKey] = useState("");
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
@@ -94,28 +99,62 @@ export function BranchHistoryTab({
         <span className="branch-history-legend-item">⚠ Diverged</span>
         <span className="branch-history-legend-item">✓ Merged</span>
         <span className="branch-history-legend-item">○ Remote-only</span>
+        <span className="branch-history-legend-item">
+          <span className="branch-history-stale-tag">stale</span>
+          No recent activity
+        </span>
+        <span className="branch-history-legend-item">
+          <svg className="branch-history-legend-icon" width={12} height={8} aria-hidden="true">
+            <circle cx={4} cy={4} r={3} fill={theme.fgBright} />
+            <circle cx={10} cy={4} r={2} fill="none" stroke={theme.fgMuted} strokeWidth={1} />
+          </svg>
+          Commit / Main ghost
+        </span>
+        <span className="branch-history-legend-item">
+          <svg className="branch-history-legend-icon" width={22} height={8} aria-hidden="true">
+            <rect width={22} height={4} y={2} rx={2} fill={mainColor} opacity={0.3} />
+          </svg>
+          Main path (diverge view)
+        </span>
+        <span className="branch-history-legend-item">
+          <span className="branch-history-legend-hash">a3f2e1d</span>
+          Hash at branch tip
+        </span>
+        <span className="branch-history-legend-item">
+          <svg className="branch-history-legend-icon" width={12} height={10} aria-hidden="true">
+            <polygon points="6,8 3,2 9,2" fill={remoteSampleColor} opacity={0.7} />
+          </svg>
+          Remote position
+        </span>
         {loading && <span className="branch-history-legend-item">Loading...</span>}
       </div>
 
       <div className="branch-history-body">
-        <div className="branch-history-timeline">
-          {visible.length === 0 ? (
-            <div className="empty-panel">No branch activity in this date range.</div>
-          ) : (
-            <TimelineSvg
-              lifecycles={visible}
-              defaultBranch={defaultBranch}
-              defaultBranchColorIndex={defaultBranchColorIndex}
-              window={window}
-              selectedKey={selectedKey}
-              hoveredKey={hoveredKey}
-              onSelect={setSelectedKey}
-              onHover={setHoveredKey}
-              onLeave={() => setHoveredKey(null)}
-            />
-          )}
+        <div className="branch-history-timeline" ref={containerRef}>
+          <div className="branch-history-timeline-scroll">
+            {visible.length === 0 ? (
+              <div className="empty-panel">No branch activity in this date range.</div>
+            ) : (
+              <TimelineSvg
+                lifecycles={visible}
+                defaultBranch={defaultBranch}
+                defaultBranchColorIndex={defaultBranchColorIndex}
+                window={window}
+                selectedKey={selectedKey}
+                hoveredKey={hoveredKey}
+                dayWidth={dayWidth}
+                svgWidth={svgWidth}
+                lx={lx}
+                showHashLabels={showHashLabels}
+                showRemoteMarkers={showRemoteMarkers}
+                onSelect={setSelectedKey}
+                onHover={setHoveredKey}
+                onLeave={() => setHoveredKey(null)}
+              />
+            )}
+          </div>
         </div>
-        {selected && <HistoryDetail branch={selected} defaultBranch={defaultBranch} onBranchAction={onBranchAction} />}
+        {selected && <HistoryDetail branch={selected} defaultBranch={defaultBranch} window={window} onBranchAction={onBranchAction} />}
       </div>
     </div>
   );
