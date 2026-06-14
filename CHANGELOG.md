@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.2.1 - 2026-06-14
+
+### Added
+
+- Per-remote **default branch** indicators: gold ★ icon on remote rows, default badge on top remote chips, and footer legend (`--sg-default-branch` token).
+- **Prune Stale** clears broken upstream links after fetch/prune (with confirmation); shows which branches were updated.
+- Remote default-branch resolution and caching (`remote-default.ts`); delete-remote guard blocks remote default branches.
+- Refresh coordination rules and managed-refresh guard (`supergit-refresh-coordination.mdc`).
+
+### Changed
+
+- Branch Tracking table uses fixed column widths (228 / 170 / 272px) so rows do not stretch across the panel.
+- Title-bar Refresh fetches and prunes only — upstream cleanup is explicit via **Prune Stale**, not silent on Refresh.
+- After branch actions, reload commits for **fetch**, **prune-stale**, and **delete-remote** (graph and history stay in sync).
+
+### Fixed
+
+- Managed refresh prevents duplicate reloads and repo-watcher races during fetch/prune.
+- Webview commit requests use query-key matching (no swallowed filter/page changes after hydration).
+- `invalidateRemoteDataCaches` clears remotes list and default-branch cache after fetch/prune/actions.
+- `unsetStaleUpstreamLinks` aborts when remote ref listing fails (no mass upstream wipe).
+- Fetch and Set Upstream uses explicit refspec to create `refs/remotes/<remote>/<branch>` before set-upstream.
+- Remote chip default badge no longer crushed by generic `.remote-chip span` sizing (use `.remote-chip-dot`).
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (157 tests)
+- `npm run build`
+- `npm run package`
+
 ## 1.2.0 - 2026-06-13
 
 ### Added

@@ -13,6 +13,7 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 - Commit graph: `supergit-commit-graph.mdc`
 - Webview/CSP/panel: `supergit-webview.mdc`
 - Branch history: `supergit-branch-history.mdc`
+- Refresh/coalescing/cache: `supergit-refresh-coordination.mdc`
 - Assets: `assets/icon.png` (package/panel icon), `assets/logo.png` (webview logo)
 
 ## Design goals
@@ -50,7 +51,10 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 - `git pull --ff-only origin <branch>` updates the **checked-out** branch, not `<branch>` when another branch is selected
 - Non-checked-out pull: `git fetch <remote> <branch>:<branch>` (fast-forward only; no `+`)
 - Checked-out pull: `git pull --ff-only <remote> <branch>`
-- After successful branch actions in `runBranchAction`, refresh in order: `loadBranches` → `loadRemotes` → **`loadBranchHistory`** → `loadCommits` when history changed
+- After successful branch actions in `runBranchAction`, refresh in order: `loadBranches` → `loadRemotes` → **`loadBranchHistory`** → `loadCommits` when refs/history changed (includes **delete-remote**, **fetch**, **prune-stale**)
+- **`invalidateRemoteDataCaches(root)`** after fetch/prune/actions (remotes list + per-remote default-branch cache)
+- **Fetch and Set Upstream** when remote branch exists but not fetched: use explicit refspec `refs/heads/<branch>:refs/remotes/<remote>/<branch>` before `git branch --set-upstream-to` (plain `git fetch remote branch` may only update FETCH_HEAD)
+- **Prune Stale** clears broken upstream via `unsetStaleUpstreamLinks`; never run cleanup if `refs/remotes/` for-each-ref fails
 - Webview must pass explicit `branchName` and `remote` on `execute-branch-action` for Tracking **and Branch History** selection
 - **Remote-only refs** (on remote, no local branch): `getRemoteBranches()` sets `localBranchName` only when a matching `refs/heads/<name>` exists. `BranchSidebar`, `TrackingView`, and **Branch History** must consume `remoteBranches` and show refs where `localBranchName` is unset — not only local rows from `getBranches()`.
 
@@ -58,6 +62,7 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 
 - Read only this repo's guidance; do not import unrelated project memories
 - Do not infer log events not visible in summaries; add diagnostics instead
+- Before claiming refresh/reload fixes, verify log **counts** per `supergit-refresh-coordination.mdc` (not just presence of one skip/coalesce line)
 - Search VS Code Server logs narrowly by session and extension name
 - Inspect screenshots/images directly; do not guess from filenames
 - Do not revert user changes; keep fixes scoped; avoid destructive git commands unless asked

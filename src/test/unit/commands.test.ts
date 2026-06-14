@@ -10,11 +10,15 @@ vi.mock("../../git/api", () => ({
   getActiveRepository: vi.fn().mockResolvedValue({ root: "/repo", name: "repo", currentBranch: "main" })
 }));
 
-import { getAheadBehind, getBranches, getCommitFileChanges, getCommits, getCurrentBranch, getRemoteBranches, getRemotes, getRepositoryState } from "../../git/commands";
+import { clearRemotesCache, getAheadBehind, getBranches, getCommitFileChanges, getCommits, getCurrentBranch, getRemoteBranches, getRemotes, getRepositoryState, unsetStaleUpstreamLinks } from "../../git/commands";
 import { getActiveRepository } from "../../git/api";
 import { runGit } from "../../git/runner";
 
 const mockedRunGit = vi.mocked(runGit);
+
+beforeEach(() => {
+  clearRemotesCache();
+});
 
 describe("getCommits", () => {
   beforeEach(() => {
@@ -182,6 +186,25 @@ describe("getRemoteBranches", () => {
     expect(remoteBranches.find((branch) => branch.ref === "origin/main")?.localBranchName).toBe("main");
     expect(remoteBranches.find((branch) => branch.ref === "upstream/release")?.localBranchName).toBeUndefined();
   });
+
+  it("matches slash remotes using the longest configured remote prefix", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "for-each-ref" && args.includes("refs/remotes/")) {
+        return ok("foo/bar/main\n");
+      }
+      if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {
+        return ok("");
+      }
+      if (args[0] === "remote") {
+        return ok("foo\turl (fetch)\nfoo/bar\turl2 (fetch)\n");
+      }
+      return ok("");
+    });
+
+    const remoteBranches = await getRemoteBranches("/repo");
+    expect(remoteBranches).toHaveLength(1);
+    expect(remoteBranches[0]).toMatchObject({ remote: "foo/bar", branchName: "main", ref: "foo/bar/main" });
+  });
 });
 
 describe("getCommitFileChanges", () => {
@@ -278,6 +301,101 @@ describe("getBranches", () => {
     expect(branches).toHaveLength(2);
     expect(branches[0].isCurrent).toBe(true);
     expect(branches[1].remotes[0].ref).toBe("origin/feature/x");
+    expect(branches[1].remotes[0].remoteRefExists).toBe(true);
+  });
+
+  it("marks configured upstream as missing when no remote-tracking ref exists", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {
+        return ok("feature/remote-ahead-origin\torigin/feature/remote-ahead-origin\torigin\n");
+      }
+      if (args[0] === "for-each-ref" && args.includes("refs/remotes/")) {
+        return ok("origin/main\n");
+      }
+      if (args[0] === "remote") {
+        return ok("origin\tgit@github.com:org/repo.git (fetch)\n");
+      }
+      if (args[0] === "branch") {
+        return ok("feature/remote-ahead-origin\n");
+      }
+      if (args[0] === "rev-list") {
+        return ok("0\t0\n");
+      }
+      return ok("");
+    });
+
+    const branches = await getBranches("/repo");
+    expect(branches[0].remotes).toHaveLength(1);
+    expect(branches[0].remotes[0].ref).toBe("origin/feature/remote-ahead-origin");
+    expect(branches[0].remotes[0].remoteRefExists).toBe(false);
+    expect(branches[0].remotes[0].isConfiguredUpstream).toBe(true);
+  });
+
+  it("clears upstream on branches whose tracking ref is missing", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {
+        return ok(
+          "feature/remote-ahead-origin\torigin/feature/remote-ahead-origin\torigin\nmain\torigin/main\torigin\nfeature/x\torigin/feature/x\torigin\n"
+        );
+      }
+      if (args[0] === "for-each-ref" && args.includes("refs/remotes/")) {
+        return ok("origin/main\norigin/feature/x\n");
+      }
+      if (args[0] === "remote") {
+        return ok("origin\tgit@github.com:org/repo.git (fetch)\n");
+      }
+      if (args[0] === "branch" && args.includes("--unset-upstream")) {
+        return ok("");
+      }
+      return ok("");
+    });
+
+    const unset = await unsetStaleUpstreamLinks("/repo");
+    expect(unset).toEqual(["feature/remote-ahead-origin"]);
+    expect(mockedRunGit).toHaveBeenCalledWith(["branch", "--unset-upstream", "feature/remote-ahead-origin"], "/repo", { timeout: 120_000 });
+    expect(mockedRunGit).not.toHaveBeenCalledWith(["branch", "--unset-upstream", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("scopes stale upstream cleanup to one remote", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {
+        return ok(
+          "feature/a\torigin/feature/a\torigin\nfeature/b\tupstream/feature/b\tupstream\n"
+        );
+      }
+      if (args[0] === "for-each-ref" && args.includes("refs/remotes/")) {
+        return ok("origin/main\n");
+      }
+      if (args[0] === "remote") {
+        return ok("origin\tgit@github.com:org/repo.git (fetch)\nupstream\tgit@github.com:org/upstream.git (fetch)\n");
+      }
+      if (args[0] === "branch" && args.includes("--unset-upstream")) {
+        return ok("");
+      }
+      return ok("");
+    });
+
+    const unset = await unsetStaleUpstreamLinks("/repo", "origin");
+    expect(unset).toEqual(["feature/a"]);
+    expect(mockedRunGit).not.toHaveBeenCalledWith(["branch", "--unset-upstream", "feature/b"], "/repo", { timeout: 120_000 });
+  });
+
+  it("does not unset upstream when remote ref discovery fails", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {
+        return ok("feature/x\torigin/feature/x\torigin\n");
+      }
+      if (args[0] === "for-each-ref" && args.includes("refs/remotes/")) {
+        return fail("fatal");
+      }
+      if (args[0] === "remote") {
+        return ok("origin\tgit@github.com:org/repo.git (fetch)\n");
+      }
+      return ok("");
+    });
+
+    await expect(unsetStaleUpstreamLinks("/repo")).resolves.toEqual([]);
+    expect(mockedRunGit).not.toHaveBeenCalledWith(["branch", "--unset-upstream", "feature/x"], "/repo", { timeout: 120_000 });
   });
 
   it("throws when local branch discovery fails", async () => {

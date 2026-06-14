@@ -81,6 +81,10 @@ function readDetailShare(): number {
   return DETAIL_SHARE_DEFAULT;
 }
 
+function commitQueryKey(dateRange: DateRange, page: number, searchText: string, scope: HistoryScope): string {
+  return JSON.stringify({ dateRange, page, searchText, scope });
+}
+
 export function App() {
   const [tab, setTab] = useState<"graph" | "branches" | "history">("graph");
   const [repo, setRepo] = useState<RepositoryState>(emptyRepo);
@@ -103,10 +107,19 @@ export function App() {
   const [detailShare, setDetailShare] = useState(readDetailShare);
   const [resizingDetail, setResizingDetail] = useState(false);
   const [branchLifecycles, setBranchLifecycles] = useState<BranchLifecycle[]>([]);
+  const [defaultBranch, setDefaultBranch] = useState("main");
   const [historyDefaultBranch, setHistoryDefaultBranch] = useState("main");
   const [historyWindow, setHistoryWindow] = useState<BranchHistoryWindow>(emptyBranchHistoryWindow);
   const layoutRef = useRef<HTMLDivElement>(null);
   const resizeStart = useRef({ x: 0, share: DETAIL_SHARE_DEFAULT });
+  const commitsHydratedFromHost = useRef(false);
+  const satisfiedCommitQueryKey = useRef<string | null>(null);
+  const dateRangeRef = useRef(dateRange);
+  const searchTextRef = useRef(searchText);
+  const historyScopeRef = useRef(historyScope);
+  dateRangeRef.current = dateRange;
+  searchTextRef.current = searchText;
+  historyScopeRef.current = historyScope;
   const logoUri = getBootstrapLogo();
 
   useEffect(() => {
@@ -120,6 +133,13 @@ export function App() {
         case "commits-data":
           setCommits(message.commits);
           setPagination(message.pagination);
+          commitsHydratedFromHost.current = true;
+          satisfiedCommitQueryKey.current = commitQueryKey(
+            dateRangeRef.current,
+            message.pagination.page,
+            searchTextRef.current,
+            historyScopeRef.current
+          );
           setSelectedHash((current) => {
             if (message.commits.some((commit) => commit.hash === current)) {
               return current;
@@ -130,6 +150,7 @@ export function App() {
         case "branches-data":
           setBranches(message.branches);
           setRemoteBranches(message.remoteBranches);
+          setDefaultBranch(message.defaultBranch);
           break;
         case "branch-history-data":
           setBranchLifecycles(message.lifecycles);
@@ -176,7 +197,15 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!commitsHydratedFromHost.current) {
+      return;
+    }
+    const queryKey = commitQueryKey(dateRange, pagination.page, searchText, historyScope);
+    if (queryKey === satisfiedCommitQueryKey.current) {
+      return;
+    }
     const timer = window.setTimeout(() => {
+      satisfiedCommitQueryKey.current = queryKey;
       postMessage({ type: "request-commits", dateRange, page: pagination.page, searchText, scope: historyScope });
     }, 150);
     return () => window.clearTimeout(timer);
@@ -275,8 +304,8 @@ export function App() {
     }
   }
 
-  function executeBranch(action: BranchAction, branchName?: string, remote?: string) {
-    postMessage({ type: "execute-branch-action", action, branchName, remote });
+  function executeBranch(action: BranchAction, branchName?: string, remote?: string, remoteBranchName?: string) {
+    postMessage({ type: "execute-branch-action", action, branchName, remote, remoteBranchName });
   }
 
   function openFileDiff(file: CommitFileChange) {
@@ -307,6 +336,7 @@ export function App() {
           setSearchOpen((current) => !current);
           setSearchText("");
         }}
+        refreshing={loadingScopes.has("all")}
         onRefresh={() => postMessage({ type: "refresh" })}
         onFetch={() => executeBranch("fetch")}
         onPull={() => executeBranch("pull")}
@@ -403,7 +433,14 @@ export function App() {
             </div>
           </>
         ) : tab === "branches" ? (
-          <TrackingView branches={branches} remoteBranches={remoteBranches} remotes={remotes} currentBranch={repo.currentBranch} onBranchAction={executeBranch} />
+          <TrackingView
+            branches={branches}
+            remoteBranches={remoteBranches}
+            remotes={remotes}
+            currentBranch={repo.currentBranch}
+            defaultBranch={defaultBranch}
+            onBranchAction={executeBranch}
+          />
         ) : (
           <BranchHistoryTab
             lifecycles={branchLifecycles}

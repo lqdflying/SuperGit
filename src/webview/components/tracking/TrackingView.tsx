@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { BranchAction, BranchInfo, RemoteBranchInfo, RemoteConfig, RemoteTracking } from "../../../shared/types";
 import { Icon, type IconName } from "../../icons";
 import { useThemeColors } from "../../ThemeProvider";
-import { branchColor, blockHeight, buildTrackingRows, remoteColor, trackingRowHeight, type TrackingRow } from "../../utils";
+import { branchColor, blockHeight, buildTrackingRows, remoteBranchNameFromRef, remoteColor, resolveSelectedTracking, trackingRowHeight, type TrackingRow } from "../../utils";
 import { CurrentBadge } from "../badges";
 
 type TrackingStatus = "synced" | "ahead" | "behind" | "diverged" | "no-upstream" | "remote-only";
@@ -13,27 +13,6 @@ function resolveCurrentBranchName(branches: BranchInfo[], currentBranch: string)
   }
   const match = branches.find((branch) => branch.isCurrent || branch.name === currentBranch);
   return match?.name ?? currentBranch;
-}
-
-function resolveActionRemote(branch: BranchInfo | undefined, selectedRemote?: string): string | undefined {
-  if (!branch) {
-    return selectedRemote;
-  }
-  if (selectedRemote) {
-    return selectedRemote;
-  }
-  const upstream = branch.remotes.find((tracking) => tracking.isConfiguredUpstream);
-  return upstream?.remote ?? branch.remotes[0]?.remote;
-}
-
-function resolveSelectedTracking(branch: BranchInfo | undefined, selectedRemote?: string): RemoteTracking | undefined {
-  if (!branch) {
-    return undefined;
-  }
-  if (selectedRemote) {
-    return branch.remotes.find((tracking) => tracking.remote === selectedRemote);
-  }
-  return branch.remotes.find((tracking) => tracking.isConfiguredUpstream) ?? branch.remotes[0];
 }
 
 function getTrackingStatus(tracking: RemoteTracking | undefined): TrackingStatus {
@@ -59,18 +38,52 @@ function formatTrackingRef(tracking: RemoteTracking | undefined, branchName?: st
   return tracking.ref || `${tracking.remote}/${branchName ?? ""}`;
 }
 
+function isRemoteDefaultBranch(remotes: RemoteConfig[], remoteName: string, branchName: string): boolean {
+  const remoteDefault = remotes.find((remote) => remote.name === remoteName)?.defaultBranch;
+  return Boolean(remoteDefault && remoteDefault === branchName);
+}
+
+function TrackingRemoteEntry({
+  isDefault,
+  defaultIconColor,
+  selected,
+  onClick,
+  children
+}: {
+  isDefault: boolean;
+  defaultIconColor: string;
+  selected: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="tracking-remote-entry">
+      {isDefault && (
+        <span className="remote-default-icon" title="Default branch on this remote">
+          <Icon type="defaultBranch" size={14} color={defaultIconColor} />
+        </span>
+      )}
+      <button className={`tracking-remote-pill${selected ? " selected" : ""}`} onClick={onClick} type="button">
+        {children}
+      </button>
+    </div>
+  );
+}
+
 export function TrackingView({
   branches,
   remoteBranches,
   remotes,
   currentBranch,
+  defaultBranch,
   onBranchAction
 }: {
   branches: BranchInfo[];
   remoteBranches: RemoteBranchInfo[];
   remotes: RemoteConfig[];
   currentBranch: string;
-  onBranchAction: (action: BranchAction, branchName?: string, remote?: string) => void;
+  defaultBranch: string;
+  onBranchAction: (action: BranchAction, branchName?: string, remote?: string, remoteBranchName?: string) => void;
 }) {
   const theme = useThemeColors();
   const trackingRows = useMemo(() => buildTrackingRows(branches, remoteBranches), [branches, remoteBranches]);
@@ -87,41 +100,41 @@ export function TrackingView({
   const currentBranchLabel = detached ? currentBranch.replace(/^DETACHED\s*/, "") : currentBranch;
   const checkoutBranch = resolveCurrentBranchName(branches, currentBranch);
   const [selectedBranchName, setSelectedBranchName] = useState<string | undefined>(checkoutBranch);
-  const [selectedRemote, setSelectedRemote] = useState<string | undefined>();
+  const [selectedTrackingRef, setSelectedTrackingRef] = useState<string | undefined>();
   const [selectedRemoteOnly, setSelectedRemoteOnly] = useState(false);
 
   useEffect(() => {
     if (!selectedBranchName) {
       return;
     }
-    const localMatch = branches.some((branch) => branch.name === selectedBranchName);
-    const remoteOnlyMatch = remoteOnlyRows.some(
-      (row) => row.remoteBranch.branchName === selectedBranchName && row.remoteBranch.remote === selectedRemote
-    );
-    if ((selectedRemoteOnly && remoteOnlyMatch) || (!selectedRemoteOnly && localMatch)) {
-      return;
+    if (selectedRemoteOnly) {
+      const remoteOnlyMatch = remoteOnlyRows.some((row) => row.remoteBranch.ref === selectedTrackingRef);
+      if (remoteOnlyMatch) {
+        return;
+      }
+    } else {
+      const branch = branches.find((candidate) => candidate.name === selectedBranchName);
+      if (branch && (!selectedTrackingRef || branch.remotes.some((tracking) => tracking.ref === selectedTrackingRef))) {
+        return;
+      }
     }
     setSelectedBranchName(checkoutBranch ?? branches[0]?.name);
-    setSelectedRemote(undefined);
+    setSelectedTrackingRef(undefined);
     setSelectedRemoteOnly(false);
-  }, [branches, checkoutBranch, remoteOnlyRows, selectedBranchName, selectedRemote, selectedRemoteOnly]);
+  }, [branches, checkoutBranch, remoteOnlyRows, selectedBranchName, selectedTrackingRef, selectedRemoteOnly]);
 
   const selectedLocalBranch =
     !selectedRemoteOnly ? branches.find((branch) => branch.name === selectedBranchName) : undefined;
   const selectedRemoteBranch =
     selectedRemoteOnly
-      ? remoteOnlyRows.find(
-          (row) => row.remoteBranch.branchName === selectedBranchName && row.remoteBranch.remote === selectedRemote
-        )?.remoteBranch
+      ? remoteOnlyRows.find((row) => row.remoteBranch.ref === selectedTrackingRef)?.remoteBranch
       : undefined;
   const selectedBranch = selectedLocalBranch ?? branches.find((branch) => branch.isCurrent) ?? branches[0];
   const actionBranchName = selectedRemoteOnly ? selectedRemoteBranch?.branchName : selectedLocalBranch?.name ?? selectedBranch?.name;
-  const actionRemote = selectedRemoteOnly
-    ? selectedRemoteBranch?.remote
-    : resolveActionRemote(selectedLocalBranch ?? selectedBranch, selectedRemote);
   const selectedTracking = selectedRemoteOnly
     ? undefined
-    : resolveSelectedTracking(selectedLocalBranch ?? selectedBranch, selectedRemote);
+    : resolveSelectedTracking(selectedLocalBranch ?? selectedBranch, selectedTrackingRef);
+  const actionRemote = selectedRemoteOnly ? selectedRemoteBranch?.remote : selectedTracking?.remote;
   const trackingStatus = selectedRemoteOnly ? "remote-only" : getTrackingStatus(selectedTracking);
   const trackingRef = selectedRemoteOnly
     ? selectedRemoteBranch?.ref
@@ -141,16 +154,38 @@ export function TrackingView({
     : selectedTracking && selectedTracking.behind > 0
       ? `Pull ${selectedTracking.behind}`
       : "Pull Selected";
+  const actionRemoteBranchName = selectedRemoteOnly
+    ? selectedRemoteBranch?.branchName
+    : selectedTracking && actionRemote
+      ? remoteBranchNameFromRef(selectedTracking.ref, actionRemote)
+      : undefined;
+  const deleteLocalLabel = actionBranchName ? `Delete Local ${actionBranchName}` : "Delete Local Branch";
+  const deleteRemoteLabel =
+    actionRemote && actionRemoteBranchName ? `Delete Remote ${actionRemote}/${actionRemoteBranchName}` : "Delete Remote Branch";
+  const needsPushUpstream = trackingStatus === "no-upstream" || selectedTracking?.remoteRefExists === false;
+  const setUpstreamLabel = needsPushUpstream ? "Push and Set Upstream" : "Set Upstream";
+  const canDeleteLocal = Boolean(
+    !selectedRemoteOnly && actionBranchName && !selectedLocalBranch?.isCurrent && actionBranchName !== defaultBranch
+  );
+  const selectedRemoteDefaultBranch = actionRemote ? remotes.find((candidate) => candidate.name === actionRemote)?.defaultBranch : undefined;
+  const protectedRemoteBranch = selectedRemoteDefaultBranch ?? defaultBranch;
+  const canDeleteRemote = Boolean(
+    actionRemote &&
+      actionRemoteBranchName &&
+      actionRemoteBranchName !== protectedRemoteBranch &&
+      (selectedRemoteOnly || selectedTrackingRef) &&
+      (selectedRemoteOnly || selectedTracking?.remoteRefExists)
+  );
 
-  function selectLocalBranch(branchName: string, remote?: string) {
+  function selectLocalBranch(branchName: string, trackingRef?: string) {
     setSelectedBranchName(branchName);
-    setSelectedRemote(remote);
+    setSelectedTrackingRef(trackingRef);
     setSelectedRemoteOnly(false);
   }
 
   function selectRemoteOnlyBranch(remoteBranch: RemoteBranchInfo) {
     setSelectedBranchName(remoteBranch.branchName);
-    setSelectedRemote(remoteBranch.remote);
+    setSelectedTrackingRef(remoteBranch.ref);
     setSelectedRemoteOnly(true);
   }
 
@@ -158,7 +193,14 @@ export function TrackingView({
     if (!actionBranchName) {
       return;
     }
-    onBranchAction(action, actionBranchName, actionRemote);
+    onBranchAction(action, actionBranchName, actionRemote, actionRemoteBranchName);
+  }
+
+  function runDeleteRemote() {
+    if (!actionRemote || !actionRemoteBranchName) {
+      return;
+    }
+    onBranchAction("delete-remote", actionBranchName, actionRemote, actionRemoteBranchName);
   }
 
   const hasRemoteOnlySection = remoteOnlyRows.length > 0;
@@ -171,13 +213,22 @@ export function TrackingView({
         <div className="tracking-subtitle">Local branches and upstream remotes</div>
       </div>
       <div className="remote-legend-bar">
-        {remotes.map((remote) => (
-          <div className="remote-chip" key={remote.name}>
-            <span style={{ background: remoteColor(remote.colorIndex, theme) }} />
-            <strong>{remote.name}</strong>
-            <em>{remote.url}</em>
-          </div>
-        ))}
+        {remotes.map((remote) => {
+          const color = remoteColor(remote.colorIndex, theme);
+          return (
+            <div className="remote-chip" key={remote.name}>
+              <span className="remote-chip-dot" style={{ background: color }} />
+              <strong>{remote.name}</strong>
+              {remote.defaultBranch ? (
+                <span className="remote-chip-default" title={`Default branch on ${remote.name}`}>
+                  <Icon type="defaultBranch" size={11} color={theme.defaultBranch} />
+                  {remote.defaultBranch}
+                </span>
+              ) : null}
+              <em title={remote.url}>{remote.url}</em>
+            </div>
+          );
+        })}
         {remotes.length === 0 && <span className="muted">No remotes configured.</span>}
       </div>
       <div className="tracking-table-wrap">
@@ -226,25 +277,32 @@ export function TrackingView({
                   ) : (
                     branch.remotes.map((tracking) => {
                       const remoteSelected =
-                        !selectedRemoteOnly && selectedBranchName === branch.name && selectedRemote === tracking.remote;
+                        !selectedRemoteOnly && selectedBranchName === branch.name && selectedTrackingRef === tracking.ref;
+                      const remoteBranchName = remoteBranchNameFromRef(tracking.ref, tracking.remote);
+                      const remoteColorValue = remoteColors.get(tracking.remote) ?? theme.fgDim;
+                      const isDefault = isRemoteDefaultBranch(remotes, tracking.remote, remoteBranchName);
                       return (
-                        <button
-                          className={`tracking-remote-pill${remoteSelected ? " selected" : ""}`}
+                        <TrackingRemoteEntry
+                          defaultIconColor={theme.defaultBranch}
+                          isDefault={isDefault}
                           key={tracking.ref}
-                          onClick={() => selectLocalBranch(branch.name, tracking.remote)}
-                          type="button"
+                          onClick={() => selectLocalBranch(branch.name, tracking.ref)}
+                          selected={remoteSelected}
                         >
-                          <span className="branch-dot" style={{ background: remoteColors.get(tracking.remote) ?? theme.fgDim }} />
+                          <span className="branch-dot" style={{ background: remoteColorValue }} />
                           <span className="remote-row-label" title={tracking.ref}>
                             {tracking.ref}
                           </span>
                           {tracking.isConfiguredUpstream && (
-                            <span className="upstream-badge" style={{ color: remoteColors.get(tracking.remote) ?? theme.accent }}>
+                            <span className="upstream-badge" style={{ color: remoteColorValue }}>
                               upstream
                             </span>
                           )}
+                          {!tracking.remoteRefExists && (
+                            <span className="upstream-badge stale-upstream-badge">not on remote</span>
+                          )}
                           <RemoteStatusIcons ahead={tracking.ahead} behind={tracking.behind} syncedColor={theme.synced} />
-                        </button>
+                        </TrackingRemoteEntry>
                       );
                     })
                   )}
@@ -258,8 +316,9 @@ export function TrackingView({
             const selected =
               selectedRemoteOnly &&
               remoteBranch.branchName === selectedBranchName &&
-              remoteBranch.remote === selectedRemote;
+              selectedTrackingRef === remoteBranch.ref;
             const remoteColorValue = remoteColors.get(remoteBranch.remote) ?? remoteColor(remoteBranch.colorIndex, theme);
+            const isDefault = isRemoteDefaultBranch(remotes, remoteBranch.remote, remoteBranch.branchName);
             return (
               <div className="tracking-table-row remote-only-row" key={`remote-only-${remoteBranch.ref}`} style={{ minHeight: trackingRowHeight(row) }}>
                 <div className="tracking-cell-local">
@@ -281,17 +340,20 @@ export function TrackingView({
                   </div>
                 </div>
                 <div className="tracking-cell-remotes">
-                  <button
-                    className={`tracking-remote-pill${selected ? " selected" : ""}`}
+                  <TrackingRemoteEntry
+                    defaultIconColor={theme.defaultBranch}
+                    isDefault={isDefault}
                     onClick={() => selectRemoteOnlyBranch(remoteBranch)}
-                    type="button"
+                    selected={selected}
                   >
                     <span className="branch-dot" style={{ background: remoteColorValue }} />
                     <span className="remote-row-label" title={remoteBranch.ref}>
                       {remoteBranch.ref}
                     </span>
-                    <span className="upstream-badge" style={{ color: remoteColorValue }}>remote</span>
-                  </button>
+                    <span className="upstream-badge" style={{ color: remoteColorValue }}>
+                      remote
+                    </span>
+                  </TrackingRemoteEntry>
                 </div>
               </div>
             );
@@ -305,6 +367,7 @@ export function TrackingView({
           <LegendItem color={theme.behind} label="-N behind" dot />
           <LegendItem color={theme.synced} label="synced" dot />
           <LegendItem color={theme.untracked} label="untracked" dot />
+          <LegendItem color={theme.defaultBranch} icon="defaultBranch" label="default branch" />
           {remotes.map((remote) => (
             <LegendItem key={remote.name} color={remoteColor(remote.colorIndex, theme)} label={remote.name} dot />
           ))}
@@ -347,12 +410,26 @@ export function TrackingView({
           <QuickButton icon="fetch" label="Fetch All Remotes" onClick={() => onBranchAction("fetch")} />
           <QuickButton
             icon="branch"
-            label="Set Upstream"
+            label={setUpstreamLabel}
             disabled={!actionBranchName || selectedRemoteOnly}
-            primary={trackingStatus === "no-upstream"}
+            primary={trackingStatus === "no-upstream" || selectedTracking?.remoteRefExists === false}
             onClick={() => runBranchAction("set-upstream")}
           />
           <QuickButton icon="refresh" label="Prune Stale" onClick={() => onBranchAction("prune-stale")} />
+          <QuickButton
+            icon="trash"
+            label={deleteLocalLabel}
+            disabled={!canDeleteLocal}
+            danger
+            onClick={() => runBranchAction("delete")}
+          />
+          <QuickButton
+            icon="trash"
+            label={deleteRemoteLabel}
+            disabled={!canDeleteRemote}
+            danger
+            onClick={runDeleteRemote}
+          />
         </div>
       </div>
     </section>
@@ -529,18 +606,26 @@ function QuickButton({
   label,
   disabled,
   primary,
+  danger,
   onClick
 }: {
   icon: IconName;
   label: string;
   disabled?: boolean;
   primary?: boolean;
+  danger?: boolean;
   onClick: () => void;
 }) {
   const theme = useThemeColors();
+  const iconColor = primary && !disabled ? theme.buttonFg : danger && !disabled ? theme.behind : theme.accent;
   return (
-    <button className={`quick-button${primary && !disabled ? " primary" : ""}`} disabled={disabled} onClick={onClick} type="button">
-      <Icon type={icon} size={13} color={primary && !disabled ? theme.buttonFg : theme.accent} />
+    <button
+      className={`quick-button${primary && !disabled ? " primary" : ""}${danger ? " danger" : ""}`}
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      <Icon type={icon} size={13} color={iconColor} />
       {label}
     </button>
   );

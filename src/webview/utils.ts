@@ -1,4 +1,4 @@
-import type { BranchInfo, BranchLifecycle, BranchLifecycleStatus, CommitNode, RemoteBranchInfo } from "../shared/types";
+import type { BranchInfo, BranchLifecycle, BranchLifecycleStatus, CommitNode, RemoteBranchInfo, RemoteTracking } from "../shared/types";
 import { graph } from "../shared/tokens";
 import type { ThemeColors } from "../shared/themeColors";
 
@@ -59,6 +59,30 @@ export function buildTrackingRows(branches: BranchInfo[], remoteBranches: Remote
 
 export function trackingRowHeight(row: TrackingRow): number {
   return row.kind === "local" ? blockHeight(row.branch) : remoteOnlyBlockHeight();
+}
+
+export function remoteBranchNameFromRef(ref: string, remote: string): string {
+  const prefix = `${remote}/`;
+  if (ref.startsWith(prefix)) {
+    return ref.slice(prefix.length);
+  }
+  const slash = ref.indexOf("/");
+  return slash >= 0 ? ref.slice(slash + 1) : ref;
+}
+
+export function resolveSelectedTracking(branch: BranchInfo | undefined, selectedTrackingRef?: string): RemoteTracking | undefined {
+  if (!branch) {
+    return undefined;
+  }
+  if (selectedTrackingRef) {
+    return branch.remotes.find((tracking) => tracking.ref === selectedTrackingRef);
+  }
+  return branch.remotes.find((tracking) => tracking.isConfiguredUpstream) ?? branch.remotes[0];
+}
+
+export function resolveActionRemote(branch: BranchInfo | undefined, selectedTrackingRef?: string): string | undefined {
+  const tracking = resolveSelectedTracking(branch, selectedTrackingRef);
+  return tracking?.remote;
 }
 
 export function defaultDate(offsetDays: number): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIELD_SEP, RECORD_SEP, isRemoteHeadRef, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes } from "../../git/parser";
+import { FIELD_SEP, RECORD_SEP, findRemoteForRef, isRemoteHeadRef, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes, parseUpstreamRef } from "../../git/parser";
 
 const commitRecord = (parts: string[]) => `${parts.join(FIELD_SEP)}${RECORD_SEP}`;
 
@@ -271,6 +271,22 @@ describe("branch ref parsers", () => {
     expect(isRemoteHeadRef("feature/HEAD")).toBe(false);
     expect(isRemoteHeadRef("origin/feature/HEAD")).toBe(false);
     expect(isRemoteHeadRef("foo/bar/HEAD", ["foo/bar"])).toBe(true);
+  });
+
+  it("parses upstream refs using the longest configured remote prefix", () => {
+    expect(parseUpstreamRef("origin/main", ["origin"])).toEqual({ remote: "origin", branch: "main" });
+    expect(parseUpstreamRef("foo/bar/main", ["foo", "foo/bar"])).toEqual({ remote: "foo/bar", branch: "main" });
+    expect(parseUpstreamRef("foo/bar/main", ["foo/bar"])).toEqual({ remote: "foo/bar", branch: "main" });
+    expect(parseUpstreamRef("foo/bar/main", ["origin"])).toBeNull();
+  });
+
+  it("matches remote-tracking refs using the longest configured remote prefix", () => {
+    expect(findRemoteForRef("foo/bar/main", ["foo", "foo/bar"])).toBe("foo/bar");
+    expect(findRemoteForRef("origin/feature/x", ["origin"])).toBe("origin");
+  });
+
+  it("falls back to the first slash when no remote list is provided", () => {
+    expect(parseUpstreamRef("origin/main")).toEqual({ remote: "origin", branch: "main" });
   });
 
   it("keeps branch names ending in HEAD when not symbolic remote HEAD", () => {

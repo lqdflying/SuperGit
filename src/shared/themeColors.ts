@@ -36,4 +36,5 @@ export interface ThemeColors {
   historyWarn: string;
   historyDanger: string;
   historyOk: string;
+  defaultBranch: string;
 }

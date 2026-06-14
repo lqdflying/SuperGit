@@ -9,6 +9,7 @@ import type {
 import { detectStatus, generateDescription } from "./branch-status";
 import { getBranches, getCurrentBranch, getRemoteBranches, getRemotes } from "./commands";
 import { runGit } from "./runner";
+import { resolveRemoteDefaultBranch } from "./remote-default";
 
 const HISTORY_ALL_CAP_DAYS = 90;
 
@@ -57,14 +58,10 @@ export function dayIndexFromIso(iso: string, window: HistoryDateWindow): number 
   return Math.max(0, Math.min(window.totalDays - 1, day));
 }
 
-export async function resolveDefaultBranch(cwd: string): Promise<string> {
-  const symbolic = await runGit(["symbolic-ref", "refs/remotes/origin/HEAD"], cwd);
-  if (symbolic.exitCode === 0) {
-    const ref = symbolic.stdout.trim();
-    const match = ref.match(/^refs\/remotes\/origin\/(.+)$/);
-    if (match?.[1]) {
-      return match[1];
-    }
+export async function resolveDefaultBranch(cwd: string, options: { network?: boolean } = {}): Promise<string> {
+  const fromOrigin = await resolveRemoteDefaultBranch(cwd, "origin", { network: options.network === true });
+  if (fromOrigin) {
+    return fromOrigin;
   }
 
   for (const candidate of ["main", "master"]) {
@@ -132,9 +129,13 @@ async function getBranchCommitsInRange(cwd: string, ref: string, window: History
     });
 }
 
-async function isMergedInto(cwd: string, branch: string, defaultBranch: string): Promise<boolean> {
-  const result = await runGit(["merge-base", "--is-ancestor", branch, defaultBranch], cwd);
+export async function isBranchMergedInto(cwd: string, branchRef: string, defaultBranch: string): Promise<boolean> {
+  const result = await runGit(["merge-base", "--is-ancestor", branchRef, defaultBranch], cwd);
   return result.exitCode === 0;
+}
+
+async function isMergedInto(cwd: string, branch: string, defaultBranch: string): Promise<boolean> {
+  return isBranchMergedInto(cwd, branch, defaultBranch);
 }
 
 async function getAheadBehindVsMain(

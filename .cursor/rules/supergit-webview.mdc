@@ -54,6 +54,14 @@ rg -n "react/jsx-runtime" dist/webview/main.js          # should match
 
 `webview html loaded` → … → `branches loaded` → `remotes loaded` → (History tab) `branch-history-data`
 
+## Commit load sync (`App.tsx`)
+
+Host `ready` / `loadInitialData` already loads commits. Webview must not duplicate `request-commits` on hydration.
+
+- Use **`satisfiedCommitQueryKey`** (not one-shot skip flags in effects)
+- Update key on each `commits-data`; post only when user query differs
+- Full rules: **`supergit-refresh-coordination.mdc`**
+
 ## Native form controls (date picker)
 
 Shared `DateRangeBar` uses `<input type="date">`. Native calendar popups follow **`color-scheme`**, not `--sg-*` alone.
@@ -104,10 +112,26 @@ Implementation: `src/webview/components/tracking/TrackingView.tsx`
 
 ### Tracking layout CSS
 
-- Row table: `.tracking-head-local` 220px, `.tracking-head-tracks` 100px, `.tracking-head-remotes` flex
+- Row table fixed widths (fit-content, no stretch): local **228px**, tracks **170px**, remotes **272px** — `.tracking-table-wrap { width: fit-content }`
+- Remote color dot: **`.remote-chip-dot`** only — never `.remote-chip span` (crushes `.remote-chip-default`)
 - Pills/rows need explicit themed backgrounds (`var(--sg-bg3)`); global `button { background: transparent }` makes them look white
 - Colored dots in `.branch-dot`; `current` / `upstream` tiny-pills stay inside pills
-- Theme: `--sg-*` CSS vars + `ThemeProvider` + `applyNativeColorScheme()`; see **Native form controls** above
+
+### Default branch indicator
+
+- Token: **`--sg-default-branch`** / `theme.defaultBranch` (gold) — **not** remote color
+- Top remote chips: dot · name · **★ defaultBranch** · URL (truncated)
+- Remote rows: **★** icon before `.tracking-remote-pill` when branch matches `remote.defaultBranch`
+- Footer legend: `★ default branch` using same token
+- Enrichment: `enrichRemotesWithDefaultBranches`; invalidate via `invalidateRemoteDataCaches(root)`
+
+### Stale upstream (`not on remote`)
+
+- `remoteRefExists: false` = configured upstream but no local `refs/remotes/<remote>/<branch>`
+- **Prune Stale** (confirmed): fetch/prune + `unsetStaleUpstreamLinks` — abort if `refs/remotes/` listing fails
+- Title-bar **Refresh**: fetch/prune/reload only — does **not** unset upstream
+
+### Theme
 
 ## Branch history tab UX
 

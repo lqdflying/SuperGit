@@ -1,9 +1,20 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { getBranchLifecycles } from "./git/branch-lifecycle";
+import { getBranchLifecycles, resolveDefaultBranch } from "./git/branch-lifecycle";
 import { executeBranchAction, executeCommitAction } from "./git/actions";
 import { getActiveRepository, onRepositoryChange } from "./git/api";
-import { getBranches, getCommitBaseHash, getCommitFileChanges, getCommits, getRemoteBranches, getRemotes, getRepositoryState } from "./git/commands";
+import {
+  getBranches,
+  getCommitBaseHash,
+  getCommitFileChanges,
+  getCommits,
+  getRemoteBranches,
+  getRemotes,
+  getRepositoryState,
+  invalidateRemoteDataCaches
+} from "./git/commands";
+import { enrichRemotesWithDefaultBranches } from "./git/remote-default";
+import { runGit } from "./git/runner";
 import { createSuperGitContentUri, SUPERGIT_DIFF_SCHEME, SuperGitDiffContentProvider } from "./git/diffProvider";
 import { debug, error as logError, info, initializeLogger, isDebugEnabled, showLogs, warn } from "./logger";
 import {
@@ -16,12 +27,22 @@ import {
   type DateRange,
   type ExtHostMessage,
   type HistoryScope,
+  type RemoteConfig,
   type WebviewMessage
 } from "./shared/types";
 
 let panel: vscode.WebviewPanel | undefined;
 let repositoryWatcher: vscode.Disposable | undefined;
 let refreshTimer: NodeJS.Timeout | undefined;
+let lastDefaultBranch = "main";
+let lastRemotes: RemoteConfig[] = [];
+let actionRefreshInProgress = false;
+let managedRefreshGeneration = 0;
+let managedRefreshClearTimer: NodeJS.Timeout | undefined;
+let loadInitialDataPromise: Promise<void> | undefined;
+let enrichRemoteDefaultsGeneration = 0;
+let latestEnrichRemoteDefaultsKey: string | undefined;
+const enrichRemoteDefaultsInflight = new Map<string, Promise<void>>();
 
 const lastCommitRequest: { dateRange: DateRange; page: number; searchText: string; scope: HistoryScope } = {
   dateRange: DEFAULT_DATE_RANGE,
@@ -45,7 +66,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBarItem.name = "SuperGit";
   statusBarItem.text = "$(git-commit) SuperGit";
-  statusBarItem.tooltip = "Open SuperGit Git Graph";
+  statusBarItem.tooltip = "Open SuperGit";
   statusBarItem.command = "superGit.show";
   statusBarItem.show();
   info("status bar item shown", { command: statusBarItem.command });
@@ -90,13 +111,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         debug("repository change ignored because panel is not open");
         return;
       }
+      if (actionRefreshInProgress) {
+        debug("repository change skipped; managed refresh already running");
+        return;
+      }
       if (refreshTimer) {
         clearTimeout(refreshTimer);
       }
       refreshTimer = setTimeout(() => {
+        if (actionRefreshInProgress) {
+          debug("repository change skipped; managed refresh already running");
+          return;
+        }
         info("refreshing after repository change");
         post({ type: "repo-changed" });
-        void loadInitialData();
+        void (async () => {
+          const root = await resolveRepositoryRoot();
+          if (root) {
+            invalidateRemoteDataCaches(root);
+          }
+          await loadInitialData();
+        })();
       }, 400);
     });
     context.subscriptions.push(repositoryWatcher);
@@ -114,6 +149,44 @@ export function deactivate(): void {
   if (refreshTimer) {
     clearTimeout(refreshTimer);
   }
+  if (managedRefreshClearTimer) {
+    clearTimeout(managedRefreshClearTimer);
+  }
+}
+
+function beginManagedRefresh(scope: string): number {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = undefined;
+  }
+  if (managedRefreshClearTimer) {
+    clearTimeout(managedRefreshClearTimer);
+    managedRefreshClearTimer = undefined;
+  }
+
+  managedRefreshGeneration += 1;
+  actionRefreshInProgress = true;
+  debug("managed refresh start", { scope, generation: managedRefreshGeneration });
+  return managedRefreshGeneration;
+}
+
+function endManagedRefresh(generation: number, settleMs = 1500): void {
+  if (managedRefreshClearTimer) {
+    clearTimeout(managedRefreshClearTimer);
+  }
+  managedRefreshClearTimer = setTimeout(() => {
+    if (managedRefreshGeneration !== generation) {
+      debug("managed refresh end skipped; superseded", { generation, current: managedRefreshGeneration });
+      return;
+    }
+    actionRefreshInProgress = false;
+    managedRefreshClearTimer = undefined;
+    debug("managed refresh end", { generation });
+  }, settleMs);
+}
+
+function enrichRemoteDefaultsKey(root: string, remotes: RemoteConfig[]): string {
+  return `${root}\0${remotes.map((remote) => remote.name).sort().join("\0")}`;
 }
 
 async function showSuperGitPanel(context: vscode.ExtensionContext): Promise<void> {
@@ -202,18 +275,53 @@ async function handleWebviewMessage(message: WebviewMessage): Promise<void> {
       await openCommitFileDiff(message.commitHash, message.file);
       return;
     case "refresh":
-      await loadInitialData();
+      await refreshFromRemote();
       return;
     case "execute-action":
       await runCommitAction(message.action, message.commitHash);
       return;
     case "execute-branch-action":
-      await runBranchAction(message.action, message.branchName, message.remote);
+      await runBranchAction(message.action, message.branchName, message.remote, message.remoteBranchName);
       return;
   }
 }
 
+async function refreshFromRemote(): Promise<void> {
+  const generation = beginManagedRefresh("refresh-from-remote");
+  try {
+    const root = await resolveRepositoryRoot();
+    if (root) {
+      post({ type: "loading", loading: true, scope: "all" });
+      try {
+        const result = await runGit(["fetch", "--all", "--prune"], root, { timeout: 120_000 });
+        if (result.exitCode !== 0) {
+          warn("refresh fetch failed", { stderr: result.stderr.trim() });
+        } else {
+          invalidateRemoteDataCaches(root);
+        }
+      } catch (error) {
+        warn("refresh fetch error", { error: String(error) });
+      }
+    }
+    await loadInitialData();
+  } finally {
+    endManagedRefresh(generation);
+  }
+}
+
 async function loadInitialData(): Promise<void> {
+  if (loadInitialDataPromise) {
+    debug("loadInitialData coalesced with in-flight load");
+    return loadInitialDataPromise;
+  }
+
+  loadInitialDataPromise = loadInitialDataInner().finally(() => {
+    loadInitialDataPromise = undefined;
+  });
+  return loadInitialDataPromise;
+}
+
+async function loadInitialDataInner(): Promise<void> {
   debug("loadInitialData start");
   post({ type: "loading", loading: true, scope: "all" });
   try {
@@ -235,7 +343,7 @@ async function loadInitialData(): Promise<void> {
       warn("no git repository root available");
       post({ type: "error", message: "Open a folder with a Git repository to use SuperGit." });
       post({ type: "commits-data", commits: [], pagination: emptyPagination() });
-      post({ type: "branches-data", branches: [], remoteBranches: [] });
+      post({ type: "branches-data", branches: [], remoteBranches: [], defaultBranch: "main" });
       post({ type: "remotes-data", remotes: [] });
       return;
     }
@@ -283,8 +391,11 @@ async function loadBranches(knownRoot?: string): Promise<void> {
   post({ type: "loading", loading: true, scope: "branches" });
   try {
     const root = knownRoot ?? (await resolveRepositoryRoot());
-    const [branches, remoteBranches] = root ? await Promise.all([getBranches(root), getRemoteBranches(root)]) : [[], []];
-    post({ type: "branches-data", branches, remoteBranches });
+    const [branches, remoteBranches, defaultBranch] = root
+      ? await Promise.all([getBranches(root), getRemoteBranches(root), resolveDefaultBranch(root)])
+      : [[], [], "main"];
+    lastDefaultBranch = defaultBranch;
+    post({ type: "branches-data", branches, remoteBranches, defaultBranch });
     info("branches loaded", { count: branches.length, remoteBranchCount: remoteBranches.length });
   } catch (error) {
     postError(error);
@@ -319,12 +430,52 @@ async function loadRemotes(knownRoot?: string): Promise<void> {
   try {
     const root = knownRoot ?? (await resolveRepositoryRoot());
     const remotes = root ? await getRemotes(root) : [];
+    lastRemotes = remotes;
     post({ type: "remotes-data", remotes });
     info("remotes loaded", { count: remotes.length });
+    if (root) {
+      void enrichRemoteDefaultsInBackground(root, remotes);
+    }
   } catch (error) {
     postError(error);
   } finally {
     post({ type: "loading", loading: false, scope: "remotes" });
+  }
+}
+
+async function enrichRemoteDefaultsInBackground(root: string, remotes: RemoteConfig[]): Promise<void> {
+  const key = enrichRemoteDefaultsKey(root, remotes);
+  latestEnrichRemoteDefaultsKey = key;
+
+  const inflight = enrichRemoteDefaultsInflight.get(key);
+  if (inflight) {
+    debug("enrichRemoteDefaults coalesced with in-flight enrichment", { key });
+    return inflight;
+  }
+
+  enrichRemoteDefaultsGeneration += 1;
+  const generation = enrichRemoteDefaultsGeneration;
+
+  const promise = enrichRemoteDefaultsInner(root, remotes, generation, key).finally(() => {
+    enrichRemoteDefaultsInflight.delete(key);
+  });
+  enrichRemoteDefaultsInflight.set(key, promise);
+  return promise;
+}
+
+async function enrichRemoteDefaultsInner(root: string, remotes: RemoteConfig[], generation: number, key: string): Promise<void> {
+  debug("enrichRemoteDefaults start", { root, remoteCount: remotes.length, generation, key });
+  try {
+    const enriched = await enrichRemotesWithDefaultBranches(root, remotes, { network: true });
+    if (key !== latestEnrichRemoteDefaultsKey) {
+      debug("enrichRemoteDefaults result skipped; stale key", { key, latest: latestEnrichRemoteDefaultsKey });
+      return;
+    }
+    lastRemotes = enriched;
+    post({ type: "remotes-data", remotes: enriched });
+    info("remote default branches enriched", { count: enriched.length });
+  } catch (error) {
+    warn("remote default branch enrichment failed", error);
   }
 }
 
@@ -381,8 +532,8 @@ async function runCommitAction(action: CommitAction, commitHash: string): Promis
   }
 }
 
-async function runBranchAction(action: BranchAction, branchName?: string, remote?: string): Promise<void> {
-  info("branch action requested", { action, branchName, remote });
+async function runBranchAction(action: BranchAction, branchName?: string, remote?: string, remoteBranchName?: string): Promise<void> {
+  info("branch action requested", { action, branchName, remote, remoteBranchName });
   const root = await resolveRepositoryRoot();
   if (!root) {
     post({ type: "action-result", success: false, message: "No Git repository is open." });
@@ -390,24 +541,38 @@ async function runBranchAction(action: BranchAction, branchName?: string, remote
   }
 
   post({ type: "loading", loading: true, scope: "action" });
+  const generation = beginManagedRefresh(`branch-action:${action}`);
   try {
-    const result = await executeBranchAction(root, action, branchName, remote);
+    const result = await executeBranchAction(root, action, branchName, remote, remoteBranchName, {
+      defaultBranch: lastDefaultBranch,
+      remoteDefaultBranch: remote ? lastRemotes.find((candidate) => candidate.name === remote)?.defaultBranch : undefined
+    });
     post({ type: "action-result", ...result });
     showActionNotification(result);
     if (result.success) {
+      invalidateRemoteDataCaches(root);
       const repo = await getRepositoryState(root);
       repo.lastFetched = new Date().toISOString();
       post({ type: "repo-state", repo });
       await loadBranches(root);
       await loadRemotes(root);
       await loadBranchHistory(lastBranchHistoryRequest.dateRange, root);
-      if (action === "pull" || action === "push" || action === "delete" || action === "set-upstream") {
+      if (
+        action === "pull" ||
+        action === "push" ||
+        action === "delete" ||
+        action === "delete-remote" ||
+        action === "set-upstream" ||
+        action === "fetch" ||
+        action === "prune-stale"
+      ) {
         await loadCommits(lastCommitRequest.dateRange, lastCommitRequest.page, lastCommitRequest.searchText, lastCommitRequest.scope, root);
       }
     }
   } catch (error) {
     postError(error);
   } finally {
+    endManagedRefresh(generation);
     post({ type: "loading", loading: false, scope: "action" });
   }
 }

@@ -33,7 +33,8 @@ export const colors = {
   historyStale: "#484f58",
   historyWarn: "#d29922",
   historyDanger: "#f85149",
-  historyOk: "#3fb950"
+  historyOk: "#3fb950",
+  defaultBranch: "#d29922"
 } as const;
 
 export const typography = {

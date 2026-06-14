@@ -39,6 +39,8 @@ rg -n "webview:|command invoked|creating SuperGit|error|warn|failed" ~/.vscode-s
 | `mounted` but no data | `webview message received {"type":"ready"}`; then Git/repo logs |
 | `ready` but no commits | Repository root, `vscode.git` API, `src/git/runner.ts` logs, workspace is a git repo |
 | Pull completed but tracking counts unchanged | Selected branch may not have been updated (non-checked-out `git pull` merges into current branch); confirm `branches loaded` after action |
+| Refresh/prune feels slow or UI flickers | Count `loadInitialData start` and `refreshing after repository change` during one fetch — see `supergit-refresh-coordination.mdc` |
+| First search/date change does nothing | Webview commit query-key sync in `App.tsx` — see `supergit-refresh-coordination.mdc` |
 | Branch tracking buttons look white/unthemed | Global transparent `button` reset in `media/styles.css`; set dark backgrounds on `.local-branch-pill`, `.remote-row`, `.quick-button`, `.branch-list-item`, `.file-change-item` |
 | Custom date picker calendar stays light in dark theme | Set `color-scheme` on `body.vscode-dark`/`vscode-light`; `.date-input` uses `--vscode-input-*` + `applyNativeColorScheme()` in `ThemeProvider` |
 

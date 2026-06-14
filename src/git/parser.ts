@@ -71,6 +71,44 @@ export function parseRemotes(raw: string): RemoteConfig[] {
   return remotes;
 }
 
+/** Match a remote-tracking ref to a configured remote name (longest prefix wins). */
+export function findRemoteForRef(ref: string, remoteNames: string[]): string | undefined {
+  const sortedRemotes = [...new Set(remoteNames)].sort((left, right) => right.length - left.length);
+  for (const remote of sortedRemotes) {
+    if (ref.startsWith(`${remote}/`)) {
+      return remote;
+    }
+  }
+  return undefined;
+}
+
+/** Split `remote/branch` using configured remote names; prefers the longest matching remote prefix. */
+export function parseUpstreamRef(upstream: string, remoteNames: string[] = []): { remote: string; branch: string } | null {
+  const trimmed = upstream.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const remote = findRemoteForRef(trimmed, remoteNames);
+  if (remote) {
+    const branch = trimmed.slice(remote.length + 1);
+    return branch ? { remote, branch } : null;
+  }
+
+  if (remoteNames.length > 0) {
+    return null;
+  }
+
+  const slash = trimmed.indexOf("/");
+  if (slash <= 0) {
+    return null;
+  }
+
+  const fallbackRemote = trimmed.slice(0, slash);
+  const branch = trimmed.slice(slash + 1);
+  return fallbackRemote && branch ? { remote: fallbackRemote, branch } : null;
+}
+
 export function parseLocalBranchRows(raw: string): LocalBranchRow[] {
   return raw
     .trim()

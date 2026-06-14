@@ -1,11 +1,19 @@
 import * as vscode from "vscode";
 import type { BranchAction, CommitAction, RemoteConfig } from "../shared/types";
-import { getCurrentBranch, getRemotes } from "./commands";
+import { isBranchMergedInto, resolveDefaultBranch } from "./branch-lifecycle";
+import { resolveRemoteDefaultBranch } from "./remote-default";
+import { getCurrentBranch, getRemotes, unsetStaleUpstreamLinks } from "./commands";
+import { parseUpstreamRef } from "./parser";
 import { runGit } from "./runner";
 
 export interface ActionResult {
   success: boolean;
   message: string;
+}
+
+export interface BranchActionContext {
+  defaultBranch?: string;
+  remoteDefaultBranch?: string;
 }
 
 export async function executeCommitAction(cwd: string, action: CommitAction, commitHash: string): Promise<ActionResult> {
@@ -48,7 +56,9 @@ export async function executeBranchAction(
   cwd: string,
   action: BranchAction,
   branchName?: string,
-  remote?: string
+  remote?: string,
+  remoteBranchName?: string,
+  context: BranchActionContext = {}
 ): Promise<ActionResult> {
   switch (action) {
     case "fetch": {
@@ -76,12 +86,18 @@ export async function executeBranchAction(
       if (remoteChoice.cancelled) {
         return { success: false, message: "Push cancelled." };
       }
-      return runGuarded(
-        cwd,
-        remoteChoice.remote ? `Push ${branch} to ${remoteChoice.remote}?` : "Push the current branch?",
-        remoteChoice.remote ? ["push", remoteChoice.remote, branch] : ["push"],
-        remoteChoice.remote ? `Pushed ${branch} to ${remoteChoice.remote}.` : "Pushed current branch."
-      );
+      if (!remoteChoice.remote) {
+        return runGuarded(cwd, "Push the current branch?", ["push"], "Pushed current branch.");
+      }
+
+      const remoteBranch = resolveRemoteBranchName(branch, remoteBranchName);
+      const remoteRef = formatRemoteRef(remoteChoice.remote, remoteBranch);
+      const confirmation =
+        remoteBranch === branch ? `Push ${branch} to ${remoteChoice.remote}?` : `Push ${branch} to ${remoteRef}?`;
+      const successMessage =
+        remoteBranch === branch ? `Pushed ${branch} to ${remoteChoice.remote}.` : `Pushed ${branch} to ${remoteRef}.`;
+
+      return runGuarded(cwd, confirmation, pushCommand(remoteChoice.remote, branch, remoteBranchName), successMessage);
     }
     case "pull": {
       const branch = branchName || (await getCurrentBranch(cwd));
@@ -100,6 +116,7 @@ export async function executeBranchAction(
 
       const remotes = await getRemotes(cwd);
       const remoteName = remoteChoice.remote ?? remotes[0]?.name;
+      const remoteBranch = resolveRemoteBranchName(branch, remoteBranchName);
       const isCheckedOut = !current.startsWith("DETACHED") && current === branch;
 
       if (!remoteName) {
@@ -109,49 +126,138 @@ export async function executeBranchAction(
         return { success: false, message: "No remote configured." };
       }
 
+      const remoteRef = formatRemoteRef(remoteName, remoteBranch);
       if (isCheckedOut) {
         return runGuarded(
           cwd,
-          `Pull ${remoteName}/${branch} with fast-forward only?`,
-          ["pull", "--ff-only", remoteName, branch],
+          `Pull ${remoteRef} with fast-forward only?`,
+          pullCheckedOutCommand(remoteName, remoteBranch),
           "Pull completed."
         );
       }
 
       return runGuarded(
         cwd,
-        `Fast-forward local ${branch} from ${remoteName}/${branch}?`,
-        ["fetch", remoteName, `${branch}:${branch}`],
+        `Fast-forward local ${branch} from ${remoteRef}?`,
+        pullFetchCommand(remoteName, branch, remoteBranchName),
         "Pull completed."
       );
     }
-    case "set-upstream": {
-      const branch = branchName || (await getCurrentBranch(cwd));
-      const remotes = await getRemotes(cwd);
-      const defaultRemote = remote || remotes[0]?.name || "origin";
-      const upstream = await vscode.window.showInputBox({
-        title: "Set Upstream",
-        prompt: `Remote tracking ref for ${branch}`,
-        value: `${defaultRemote}/${branch}`
-      });
-      if (!upstream) {
-        return { success: false, message: "Set upstream cancelled." };
-      }
-      return runGuarded(cwd, `Set ${branch} to track ${upstream}?`, ["branch", "--set-upstream-to", upstream, branch], `Set upstream for ${branch}.`);
-    }
-    case "delete":
+    case "set-upstream":
+      return executeSetUpstream(cwd, branchName, remote, remoteBranchName);
+    case "delete": {
       if (!branchName) {
         return { success: false, message: "Select a branch before deleting." };
       }
-      return runGuarded(cwd, `Delete local branch ${branchName}?`, ["branch", "-d", branchName], `Deleted ${branchName}.`);
-    case "prune-stale":
-      return runGuarded(
-        cwd,
-        remote ? `Prune stale refs from ${remote}?` : "Prune stale refs from all remotes?",
-        remote ? ["remote", "prune", remote] : ["fetch", "--all", "--prune"],
-        remote ? `Pruned ${remote}.` : "Pruned all remotes."
+
+      const current = await getCurrentBranch(cwd);
+      if (!current.startsWith("DETACHED") && current === branchName) {
+        return { success: false, message: "Cannot delete the checked-out branch." };
+      }
+
+      const defaultBranch = await resolveDefaultBranch(cwd);
+      if (branchName === defaultBranch) {
+        return { success: false, message: `Cannot delete the default branch (${defaultBranch}).` };
+      }
+
+      const merged = await isBranchMergedInto(cwd, branchName, defaultBranch);
+      if (merged) {
+        const choice = await vscode.window.showWarningMessage(
+          `"${branchName}" is merged into "${defaultBranch}". Safe to delete locally.`,
+          { modal: true },
+          "Delete"
+        );
+        if (choice !== "Delete") {
+          return { success: false, message: "Action cancelled." };
+        }
+        return executeGitCommand(cwd, ["branch", "-d", branchName], `Deleted ${branchName}.`);
+      }
+
+      const choice = await vscode.window.showWarningMessage(
+        `"${branchName}" has commits not merged into "${defaultBranch}". Deleting may lose work.`,
+        { modal: true },
+        "Delete (safe)",
+        "Force Delete"
       );
+      if (choice !== "Delete (safe)" && choice !== "Force Delete") {
+        return { success: false, message: "Action cancelled." };
+      }
+
+      const flag = choice === "Force Delete" ? "-D" : "-d";
+      return executeGitCommand(cwd, ["branch", flag, branchName], `Deleted ${branchName}.`);
+    }
+    case "delete-remote": {
+      const remoteBranch = remoteBranchName ?? branchName;
+      if (!remoteBranch || !remote) {
+        return { success: false, message: "Select a remote branch before deleting." };
+      }
+
+      const remoteDefaultBranch =
+        context.remoteDefaultBranch ??
+        (await resolveRemoteDefaultBranch(cwd, remote, { network: false })) ??
+        (remote === "origin" ? context.defaultBranch : undefined);
+      if (remoteDefaultBranch && remoteBranch === remoteDefaultBranch) {
+        return {
+          success: false,
+          message: `Cannot delete the default branch (${remote}/${remoteBranch}) on the remote. Change the remote default branch first.`
+        };
+      }
+
+      const hasLocalRef = await localRemoteTrackingRefExists(cwd, remote, remoteBranch);
+      if (!hasLocalRef) {
+        const existsOnRemote = await remoteBranchExistsOnRemote(cwd, remote, remoteBranch);
+        if (!existsOnRemote) {
+          return {
+            success: false,
+            message: `Remote branch ${remote}/${remoteBranch} does not exist on ${remote}. Run Prune Stale to clear broken upstream links.`
+          };
+        }
+      }
+
+      const remoteRef = `refs/remotes/${remote}/${remoteBranch}`;
+      const defaultBranch = context.defaultBranch ?? (await resolveDefaultBranch(cwd, { network: false }));
+      const merged = await isBranchMergedInto(cwd, remoteRef, defaultBranch);
+      const message = merged
+        ? `Remote branch "${remote}/${remoteBranch}" is merged into "${defaultBranch}". Safe to delete.`
+        : `Remote branch "${remote}/${remoteBranch}" has commits not merged into "${defaultBranch}". Deleting may lose work on the remote.`;
+
+      const choice = await vscode.window.showWarningMessage(message, { modal: true }, "Delete Remote");
+      if (choice !== "Delete Remote") {
+        return { success: false, message: "Action cancelled." };
+      }
+
+      return executeDeleteRemoteCommand(cwd, remote, remoteBranch);
+    }
+    case "prune-stale":
+      return executePruneStale(cwd, remote);
   }
+}
+
+async function executePruneStale(cwd: string, remote?: string): Promise<ActionResult> {
+  const allowed = await vscode.window.showWarningMessage(
+    remote
+      ? `Prune stale refs from ${remote} and clear broken upstream links?`
+      : "Prune stale refs from all remotes and clear broken upstream links?",
+    { modal: true },
+    "Run"
+  );
+  if (allowed !== "Run") {
+    return { success: false, message: "Action cancelled." };
+  }
+
+  const pruneArgs = remote ? ["remote", "prune", remote] : ["fetch", "--all", "--prune"];
+  const pruneResult = await runGit(pruneArgs, cwd, { timeout: 120_000 });
+  if (pruneResult.exitCode !== 0) {
+    const detail = pruneResult.timedOut ? "command timed out" : pruneResult.stderr.trim() || "git command failed";
+    return { success: false, message: detail };
+  }
+
+  const unsetBranches = await unsetStaleUpstreamLinks(cwd, remote);
+  let message = remote ? `Pruned ${remote}.` : "Pruned all remotes.";
+  if (unsetBranches.length > 0) {
+    message += ` Cleared upstream on ${unsetBranches.join(", ")}.`;
+  }
+  return { success: true, message };
 }
 
 async function resolveRemoteChoice(
@@ -195,12 +301,162 @@ async function resolveRemoteChoice(
   return { cancelled: false, remote: picked.remote?.name };
 }
 
+function resolveRemoteBranchName(localBranch: string, remoteBranchName?: string): string {
+  return remoteBranchName ?? localBranch;
+}
+
+function formatRemoteRef(remoteName: string, remoteBranch: string): string {
+  return `${remoteName}/${remoteBranch}`;
+}
+
+function pushCommand(remoteName: string, localBranch: string, remoteBranchName?: string): string[] {
+  const remoteBranch = resolveRemoteBranchName(localBranch, remoteBranchName);
+  if (remoteBranch === localBranch) {
+    return ["push", remoteName, localBranch];
+  }
+  return ["push", remoteName, `${localBranch}:${remoteBranch}`];
+}
+
+function pullCheckedOutCommand(remoteName: string, remoteBranch: string): string[] {
+  return ["pull", "--ff-only", remoteName, remoteBranch];
+}
+
+function pullFetchCommand(remoteName: string, localBranch: string, remoteBranchName?: string): string[] {
+  const remoteBranch = resolveRemoteBranchName(localBranch, remoteBranchName);
+  if (remoteBranch === localBranch) {
+    return ["fetch", remoteName, `${localBranch}:${localBranch}`];
+  }
+  return ["fetch", remoteName, `${remoteBranch}:${localBranch}`];
+}
+
+function fetchRemoteTrackingRefCommand(remoteName: string, remoteBranch: string): string[] {
+  return ["fetch", remoteName, `refs/heads/${remoteBranch}:refs/remotes/${remoteName}/${remoteBranch}`];
+}
+
+async function remoteBranchExistsOnRemote(cwd: string, remote: string, remoteBranch: string): Promise<boolean> {
+  const result = await runGit(["ls-remote", "--heads", remote, remoteBranch], cwd, { timeout: 120_000 });
+  return result.exitCode === 0 && result.stdout.trim().length > 0;
+}
+
+async function localRemoteTrackingRefExists(cwd: string, remote: string, remoteBranch: string): Promise<boolean> {
+  const result = await runGit(["rev-parse", "--verify", `refs/remotes/${remote}/${remoteBranch}`], cwd, { timeout: 120_000 });
+  return result.exitCode === 0;
+}
+
+function pushSetUpstreamCommand(remoteName: string, localBranch: string, remoteBranchName?: string): string[] {
+  const remoteBranch = resolveRemoteBranchName(localBranch, remoteBranchName);
+  if (remoteBranch === localBranch) {
+    return ["push", "-u", remoteName, localBranch];
+  }
+  return ["push", "-u", remoteName, `${localBranch}:${remoteBranch}`];
+}
+
+async function executeSetUpstream(
+  cwd: string,
+  branchName?: string,
+  remote?: string,
+  remoteBranchName?: string
+): Promise<ActionResult> {
+  const branch = branchName || (await getCurrentBranch(cwd));
+  if (branch.startsWith("DETACHED")) {
+    return { success: false, message: "Cannot set upstream while in detached HEAD." };
+  }
+
+  const remotes = await getRemotes(cwd);
+  const defaultRemote = remote || remotes[0]?.name || "origin";
+  const defaultRemoteBranch = resolveRemoteBranchName(branch, remoteBranchName);
+  const upstream = await vscode.window.showInputBox({
+    title: "Set Upstream",
+    prompt: `Remote tracking ref for ${branch}`,
+    value: `${defaultRemote}/${defaultRemoteBranch}`
+  });
+  if (!upstream) {
+    return { success: false, message: "Set upstream cancelled." };
+  }
+
+  const parsed = parseUpstreamRef(upstream.trim(), remotes.map((candidate) => candidate.name));
+  if (!parsed) {
+    return { success: false, message: "Upstream must look like remote/branch (for example origin/main)." };
+  }
+
+  const remoteRef = formatRemoteRef(parsed.remote, parsed.branch);
+  const hasLocalTrackingRef = await localRemoteTrackingRefExists(cwd, parsed.remote, parsed.branch);
+  if (hasLocalTrackingRef) {
+    return runGuarded(
+      cwd,
+      `Set ${branch} to track ${upstream}?`,
+      ["branch", "--set-upstream-to", upstream, branch],
+      `Set upstream for ${branch}.`
+    );
+  }
+
+  const existsOnRemote = await remoteBranchExistsOnRemote(cwd, parsed.remote, parsed.branch);
+  if (existsOnRemote) {
+    const allowed = await vscode.window.showWarningMessage(
+      `${remoteRef} exists on ${parsed.remote} but is not fetched locally. Fetch it and set ${branch} to track it?`,
+      { modal: true },
+      "Fetch and Set Upstream"
+    );
+    if (allowed !== "Fetch and Set Upstream") {
+      return { success: false, message: "Set upstream cancelled." };
+    }
+
+    const fetchResult = await runGit(fetchRemoteTrackingRefCommand(parsed.remote, parsed.branch), cwd, { timeout: 120_000 });
+    if (fetchResult.exitCode !== 0) {
+      const detail = fetchResult.timedOut ? "command timed out" : fetchResult.stderr.trim() || "git fetch failed";
+      return { success: false, message: detail };
+    }
+
+    return executeGitCommand(
+      cwd,
+      ["branch", "--set-upstream-to", upstream, branch],
+      `Set upstream for ${branch} to ${upstream}.`
+    );
+  }
+
+  const allowed = await vscode.window.showWarningMessage(
+    `${remoteRef} does not exist on ${parsed.remote} yet. Push ${branch} and set it as the upstream?`,
+    { modal: true },
+    "Push and Set Upstream"
+  );
+  if (allowed !== "Push and Set Upstream") {
+    return { success: false, message: "Set upstream cancelled." };
+  }
+
+  return executeGitCommand(
+    cwd,
+    pushSetUpstreamCommand(parsed.remote, branch, parsed.branch),
+    `Pushed ${branch} and set upstream to ${upstream}.`
+  );
+}
+
+async function executeDeleteRemoteCommand(cwd: string, remote: string, remoteBranch: string): Promise<ActionResult> {
+  const result = await runGit(["push", remote, "--delete", remoteBranch], cwd, { timeout: 120_000 });
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.trim();
+    if (/refusing to delete the current branch/i.test(stderr)) {
+      return {
+        success: false,
+        message: `Cannot delete ${remote}/${remoteBranch}: it is the default branch on ${remote}. Change the remote default branch first.`
+      };
+    }
+    const detail = result.timedOut ? "command timed out" : stderr || "git command failed";
+    return { success: false, message: detail };
+  }
+
+  return { success: true, message: `Deleted remote branch ${remote}/${remoteBranch}.` };
+}
+
 async function runGuarded(cwd: string, confirmation: string, args: string[], successMessage: string): Promise<ActionResult> {
   const allowed = await vscode.window.showWarningMessage(confirmation, { modal: true }, "Run");
   if (allowed !== "Run") {
     return { success: false, message: "Action cancelled." };
   }
 
+  return executeGitCommand(cwd, args, successMessage);
+}
+
+async function executeGitCommand(cwd: string, args: string[], successMessage: string): Promise<ActionResult> {
   const result = await runGit(args, cwd, { timeout: 120_000 });
   if (result.exitCode !== 0) {
     const detail = result.timedOut ? "command timed out" : result.stderr.trim() || "git command failed";

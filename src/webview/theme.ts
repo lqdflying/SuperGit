@@ -59,7 +59,8 @@ export function readThemeColors(root: HTMLElement = document.documentElement): T
     historyStale: readVar(styles, "--sg-history-stale", fallbackColors.historyStale),
     historyWarn: readVar(styles, "--sg-history-warn", fallbackColors.historyWarn),
     historyDanger: readVar(styles, "--sg-history-danger", fallbackColors.historyDanger),
-    historyOk: readVar(styles, "--sg-history-ok", fallbackColors.historyOk)
+    historyOk: readVar(styles, "--sg-history-ok", fallbackColors.historyOk),
+    defaultBranch: readVar(styles, "--sg-default-branch", fallbackColors.defaultBranch)
   };
 }
 

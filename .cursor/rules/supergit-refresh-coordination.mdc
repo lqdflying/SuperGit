@@ -1,0 +1,80 @@
+---
+description: Managed refresh, coalescing, cache invalidation, and webview commit-sync invariants
+globs: src/extension.ts,src/webview/App.tsx,src/git/commands.ts
+alwaysApply: false
+---
+
+# SuperGit Refresh & Async Coordination
+
+Lessons from fetch/prune/reload performance debugging. Read before changing `extension.ts`, `App.tsx` commit loading, or remotes cache.
+
+## Managed refresh (`extension.ts`)
+
+Any path that runs slow ref-mutating Git (`fetch --all --prune`, push, pull, prune-stale, title-bar Refresh) must:
+
+1. Call `beginManagedRefresh(scope)` **before** the slow command (not after success).
+2. Clear pending repo-watcher debounce timers on start.
+3. Skip repo-change events **immediately** when guard is active (not only inside the 400ms callback).
+4. Call `endManagedRefresh(generation)` only after fetch + reload finish; clear flag via generation-matched delayed settle.
+
+**Never** use a shared boolean + unconditional `setTimeout(..., 1500)` to clear suppression — overlapping operations (e.g. prune-stale then Refresh) will clear each other's guards mid-fetch.
+
+## In-flight coalescing
+
+| Operation | Pattern |
+|-----------|---------|
+| `loadInitialData` | Dedupe in-flight promise; log `coalesced with in-flight load` |
+| `enrichRemoteDefaultsInBackground` | Check inflight map **before** bumping generation; key = `root + sorted remote names` |
+| Apply enriched remotes | Post only when `key === latestEnrichRemoteDefaultsKey` (handles A→B→A coalesce edge) |
+
+Do **not** increment enrichment generation on coalesced return — that skips valid in-flight results.
+
+## Cache invalidation
+
+Call `invalidateRemoteDataCaches(root)` (clears `clearRemotesCache` + `clearRemoteDefaultBranchCache`) on:
+
+- Successful manual refresh fetch
+- Successful branch actions
+- Repo-watcher debounced reload (external `git remote` add/remove, fetch/prune, remote HEAD changes)
+
+Without default-branch cache invalidation, default badges and delete-default-remote guards can stay stale after fetch/prune or remote HEAD updates.
+
+**Stale upstream cleanup:** `unsetStaleUpstreamLinks()` runs only from explicit **Prune Stale** (confirmed action), not title-bar Refresh. Abort cleanup when `refs/remotes/` for-each-ref fails — never treat a failed listing as “no refs exist.”
+
+**Post-action reload:** `fetch` and `prune-stale` must call `loadCommits` (remote refs on graph). `delete-remote` must reload branches, remotes, history, and commits.
+
+## Webview commit requests (`App.tsx`)
+
+Initial `ready` → host `loadInitialData` already loads commits. Avoid duplicate `request-commits`.
+
+**Do not** use one-shot skip flags cleared inside a `useEffect` — if deps unchanged (e.g. `pagination.page` stays 0), the flag is never consumed and the **first real user change is swallowed**.
+
+**Use query-key matching:**
+
+- `satisfiedCommitQueryKey` = JSON of `{ dateRange, page, searchText, scope }` last satisfied by host
+- Update on every `commits-data` (use refs for current filters in the message listener)
+- Post `request-commits` only when current query key ≠ `satisfiedCommitQueryKey`
+
+## Log verification (count, do not vibe-check)
+
+Before claiming a refresh fix, grep the latest `supergit.log`:
+
+| Invariant | One manual Refresh |
+|-----------|-------------------|
+| `managed refresh start` | 1 |
+| `fetch --all --prune` | 1 start, 1 complete |
+| `loadInitialData start` | 1 after fetch (not during) |
+| `refreshing after repository change` | 0 mid-fetch |
+| `repository change skipped; managed refresh already running` | may be >0 during fetch |
+
+Also test **overlap**: Prune Stale immediately followed by title-bar Refresh.
+
+## Static review triggers
+
+Re-read diffs that introduce:
+
+- `setTimeout` clearing shared suppression/coalescing state
+- Message handler sets a ref flag; effect clears it (verify effect always runs when flag is set)
+- Global single promise for enrichment without per-key + latest-key apply guard
+
+Network-bound `fetch --all --prune` (~5s) is expected; the win is eliminating **extra** full reloads during fetch. Refresh button: disabled + tooltip while `loading` scope `all`.

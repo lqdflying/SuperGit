@@ -3,7 +3,8 @@ import type { BranchInfo, CommitFileChange, DateRange, HistoryScope, RemoteBranc
 import { DEFAULT_HISTORY_SCOPE, PAGE_SIZE } from "../shared/types";
 import { colors } from "../shared/tokens";
 import { getActiveRepository } from "./api";
-import { GIT_LOG_FORMAT, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes, isRemoteHeadRef } from "./parser";
+import { GIT_LOG_FORMAT, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes, isRemoteHeadRef, findRemoteForRef } from "./parser";
+import { clearRemoteDefaultBranchCache } from "./remote-default";
 import { runGit } from "./runner";
 
 export async function getCommits(
@@ -50,6 +51,72 @@ export async function getCommits(
 
 const REMOTE_REF_EXCLUDE = "refs/remotes/*/HEAD";
 
+const remotesInflight = new Map<string, Promise<RemoteConfig[]>>();
+const remotesCache = new Map<string, RemoteConfig[]>();
+
+export function clearRemotesCache(cwd?: string): void {
+  if (!cwd) {
+    remotesCache.clear();
+    remotesInflight.clear();
+    return;
+  }
+  remotesCache.delete(cwd);
+  remotesInflight.delete(cwd);
+}
+
+/** Invalidate remotes list cache and per-remote default-branch cache after fetch/prune or ref changes. */
+export function invalidateRemoteDataCaches(cwd?: string): void {
+  clearRemotesCache(cwd);
+  clearRemoteDefaultBranchCache(cwd);
+}
+
+/** Clear upstream on local branches whose remote-tracking ref is missing (often after fetch --prune). */
+export async function unsetStaleUpstreamLinks(cwd: string, remoteFilter?: string): Promise<string[]> {
+  const [branchResult, remoteRefResult, remotes] = await Promise.all([
+    runGit(
+      ["for-each-ref", "--format=%(refname:short)%09%(upstream:short)%09%(upstream:remotename)", "refs/heads/"],
+      cwd
+    ),
+    runGit(
+      ["for-each-ref", "--format=%(refname:short)", "refs/remotes/", `--exclude=${REMOTE_REF_EXCLUDE}`],
+      cwd
+    ),
+    getRemotes(cwd)
+  ]);
+
+  if (branchResult.exitCode !== 0 || remoteRefResult.exitCode !== 0) {
+    return [];
+  }
+
+  const branches = parseLocalBranchRows(branchResult.stdout);
+  const remoteNames = remotes.map((remote) => remote.name);
+  const remoteRefs = new Set(parseRemoteRefs(remoteRefResult.stdout, remoteNames));
+  const unsetBranches: string[] = [];
+
+  for (const branch of branches) {
+    if (!branch.upstreamRef) {
+      continue;
+    }
+
+    const upstreamRemote =
+      branch.upstreamRemote || findRemoteForRef(branch.upstreamRef, remoteNames) || branch.upstreamRef.split("/")[0];
+    if (remoteFilter && upstreamRemote !== remoteFilter) {
+      continue;
+    }
+
+    if (remoteRefs.has(branch.upstreamRef)) {
+      continue;
+    }
+
+    const result = await runGit(["branch", "--unset-upstream", branch.name], cwd, { timeout: 120_000 });
+    if (result.exitCode === 0) {
+      unsetBranches.push(branch.name);
+    }
+  }
+
+  return unsetBranches;
+}
+
 export async function getBranches(cwd: string): Promise<BranchInfo[]> {
   const [branchResult, remoteRefResult, remotes, currentBranch] = await Promise.all([
     runGit(
@@ -76,7 +143,8 @@ export async function getBranches(cwd: string): Promise<BranchInfo[]> {
     branches.map(async (branch, index): Promise<BranchInfo> => {
       const candidates = new Map<string, { remote: string; ref: string; isConfiguredUpstream: boolean }>();
       if (branch.upstreamRef) {
-        const remoteName = branch.upstreamRemote || branch.upstreamRef.split("/")[0] || "origin";
+        const remoteName =
+          branch.upstreamRemote || findRemoteForRef(branch.upstreamRef, remoteNames) || branch.upstreamRef.split("/")[0] || "origin";
         candidates.set(branch.upstreamRef, {
           remote: remoteName,
           ref: branch.upstreamRef,
@@ -97,8 +165,9 @@ export async function getBranches(cwd: string): Promise<BranchInfo[]> {
 
       const tracking = await Promise.all(
         [...candidates.values()].map(async (candidate) => {
-          const counts = await getAheadBehind(cwd, branch.name, candidate.ref);
-          return { ...candidate, ...counts };
+          const remoteRefExists = remoteRefs.has(candidate.ref);
+          const counts = remoteRefExists ? await getAheadBehind(cwd, branch.name, candidate.ref) : { ahead: 0, behind: 0 };
+          return { ...candidate, ...counts, remoteRefExists };
         })
       );
 
@@ -135,7 +204,8 @@ export async function getRemoteBranches(cwd: string): Promise<RemoteBranchInfo[]
       return [];
     }
 
-    const remote = remotes.find((candidate) => ref.startsWith(`${candidate.name}/`));
+    const matchedRemoteName = findRemoteForRef(ref, remoteNames);
+    const remote = matchedRemoteName ? remoteByName.get(matchedRemoteName) : undefined;
     if (!remote) {
       const fallbackRemote = ref.split("/")[0];
       const branchName = ref.slice(fallbackRemote.length + 1);
@@ -164,11 +234,31 @@ export async function getRemoteBranches(cwd: string): Promise<RemoteBranchInfo[]
 }
 
 export async function getRemotes(cwd: string): Promise<RemoteConfig[]> {
-  const result = await runGit(["remote", "-v"], cwd);
-  if (result.exitCode !== 0) {
-    return [];
+  const cached = remotesCache.get(cwd);
+  if (cached) {
+    return cached;
   }
-  return parseRemotes(result.stdout);
+
+  const pending = remotesInflight.get(cwd);
+  if (pending) {
+    return pending;
+  }
+
+  const lookup = runGit(["remote", "-v"], cwd).then((result) => {
+    if (result.exitCode !== 0) {
+      return [];
+    }
+    const remotes = parseRemotes(result.stdout);
+    remotesCache.set(cwd, remotes);
+    return remotes;
+  });
+  remotesInflight.set(cwd, lookup);
+
+  try {
+    return await lookup;
+  } finally {
+    remotesInflight.delete(cwd);
+  }
 }
 
 export async function getAheadBehind(cwd: string, localBranch: string, remoteBranch: string): Promise<{ ahead: number; behind: number }> {

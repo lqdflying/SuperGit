@@ -23,7 +23,9 @@ export type IconName =
   | "down"
   | "x"
   | "copy"
-  | "plus";
+  | "plus"
+  | "trash"
+  | "defaultBranch";
 
 interface IconProps {
   type: IconName;
@@ -169,6 +171,24 @@ export function Icon({ type, size = 14, color, style }: IconProps): ReactElement
       <>
         <line x1="8" y1="3" x2="8" y2="13" />
         <line x1="3" y1="8" x2="13" y2="8" />
+      </>
+    ),
+    trash: (
+      <>
+        <path d="M3 5h10" />
+        <path d="M5 5V4a1 1 0 011-1h4a1 1 0 011 1v1" />
+        <path d="M6 8v4M10 8v4" />
+        <path d="M4 5l.5 8a1 1 0 001 1h5a1 1 0 001-1L12 5" />
+      </>
+    ),
+    defaultBranch: (
+      <>
+        <path
+          d="M8 2.5l1.45 2.94 3.24.47-2.34 2.28.55 3.23L8 9.88 5.1 11.42l.55-3.23L3.31 5.91l3.24-.47L8 2.5z"
+          fill={strokeColor}
+          fillOpacity={0.22}
+        />
+        <path d="M8 2.5l1.45 2.94 3.24.47-2.34 2.28.55 3.23L8 9.88 5.1 11.42l.55-3.23L3.31 5.91l3.24-.47L8 2.5z" />
       </>
     )
   };

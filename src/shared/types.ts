@@ -40,6 +40,8 @@ export interface RemoteTracking {
   ahead: number;
   behind: number;
   isConfiguredUpstream: boolean;
+  /** False when upstream is configured but no matching refs/remotes/* ref exists locally (often not on remote). */
+  remoteRefExists: boolean;
 }
 
 export interface RemoteBranchInfo {
@@ -54,6 +56,8 @@ export interface RemoteConfig {
   name: string;
   url: string;
   colorIndex: number;
+  /** Default branch on this remote (from remote HEAD), when known. */
+  defaultBranch?: string;
 }
 
 export interface DateRange {
@@ -112,6 +116,7 @@ export type BranchAction =
   | "fetch"
   | "set-upstream"
   | "delete"
+  | "delete-remote"
   | "prune-stale";
 
 export type BranchLifecycleStatus = "active" | "diverged" | "merged" | "remote-only";
@@ -197,12 +202,12 @@ export type WebviewMessage =
   | { type: "open-commit-file-diff"; commitHash: string; file: CommitFileChange }
   | { type: "refresh" }
   | { type: "execute-action"; action: CommitAction; commitHash: string }
-  | { type: "execute-branch-action"; action: BranchAction; branchName?: string; remote?: string };
+  | { type: "execute-branch-action"; action: BranchAction; branchName?: string; remote?: string; remoteBranchName?: string };
 
 export type ExtHostMessage =
   | { type: "repo-state"; repo: RepositoryState }
   | { type: "commits-data"; commits: CommitNode[]; pagination: PaginationState }
-  | { type: "branches-data"; branches: BranchInfo[]; remoteBranches: RemoteBranchInfo[] }
+  | { type: "branches-data"; branches: BranchInfo[]; remoteBranches: RemoteBranchInfo[]; defaultBranch: string }
   | { type: "remotes-data"; remotes: RemoteConfig[] }
   | { type: "branch-history-data"; lifecycles: BranchLifecycle[]; defaultBranch: string; remoteMains: RemoteMainPosition[]; window: BranchHistoryWindow }
   | { type: "commit-details-data"; commitHash: string; baseHash?: string; files: CommitFileChange[] }

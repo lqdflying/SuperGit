@@ -20,6 +20,7 @@ import {
   resolveHistoryDateWindow,
   sortBranchLifecycles
 } from "../../git/branch-lifecycle";
+import { clearRemoteDefaultBranchCache } from "../../git/remote-default";
 import { getBranches, getRemoteBranches, getRemotes } from "../../git/commands";
 import { runGit } from "../../git/runner";
 import type { BranchLifecycle } from "../../shared/types";
@@ -71,7 +72,8 @@ describe("dayIndexFromIso", () => {
 
 describe("resolveDefaultBranch", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockedRunGit.mockReset();
+    clearRemoteDefaultBranchCache();
   });
 
   it("TC-BH11: uses origin HEAD symbolic ref", async () => {
@@ -79,11 +81,15 @@ describe("resolveDefaultBranch", () => {
     await expect(resolveDefaultBranch("/repo")).resolves.toBe("main");
   });
 
-  it("TC-BH12: falls back main then master then first local", async () => {
+  it("TC-BH11b: uses ls-remote symref when symbolic ref is missing", async () => {
     mockedRunGit
       .mockResolvedValueOnce(fail())
-      .mockResolvedValueOnce(fail())
-      .mockResolvedValueOnce(fail());
+      .mockResolvedValueOnce(ok("ref: refs/heads/develop\tHEAD\nabc123\tHEAD\n"));
+    await expect(resolveDefaultBranch("/repo", { network: true })).resolves.toBe("develop");
+  });
+
+  it("TC-BH12: falls back main then master then first local", async () => {
+    mockedRunGit.mockResolvedValueOnce(fail()).mockResolvedValueOnce(fail()).mockResolvedValueOnce(fail());
     mockedGetBranches.mockResolvedValueOnce([{ name: "develop", colorIndex: 0, isCurrent: true, remotes: [] }]);
     await expect(resolveDefaultBranch("/repo")).resolves.toBe("develop");
   });
@@ -242,7 +248,7 @@ describe("getBranchLifecycles", () => {
   it("TC-BH13: includes remote-only refs without localBranchName", async () => {
     mockedGetBranches.mockResolvedValue([
       { name: "main", colorIndex: 0, isCurrent: true, remotes: [] },
-      { name: "feature/x", colorIndex: 1, isCurrent: false, remotes: [{ remote: "origin", ref: "origin/feature/x", ahead: 0, behind: 0, isConfiguredUpstream: true }] }
+      { name: "feature/x", colorIndex: 1, isCurrent: false, remotes: [{ remote: "origin", ref: "origin/feature/x", ahead: 0, behind: 0, isConfiguredUpstream: true, remoteRefExists: true }] }
     ]);
     mockedGetRemoteBranches.mockResolvedValue([
       { remote: "origin", branchName: "legacy", ref: "origin/legacy", colorIndex: 2 }
