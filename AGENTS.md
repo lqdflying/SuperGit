@@ -69,6 +69,15 @@ When a branch is selected, derive status from the chosen tracking ref (upstream 
 - Use `.quick-button.primary` for the recommended action(s).
 - Do not leave generic "Push Current" / "Pull Current" copy once selection exists.
 
+### Multi-remote upstream (fork workflow)
+
+When a branch already has a default upstream and the repo has multiple remotes:
+
+- **Add Remote Tracking** (`add-upstream`): push or fetch to another remote without `-u`; default unchanged.
+- **Set as Default Upstream** (`set-default-upstream`): contextual relabel of the upstream quick-action slot after selecting a non-default tracked remote row; runs `git branch --set-upstream-to` only.
+- Remote pills show a **`default`** badge on `isConfiguredUpstream`; additional remotes have no badge.
+- First-time setup still uses **Set Upstream** / **Push and Set Upstream** (`set-upstream`).
+
 ### Tracking Layout CSS
 
 - Use stable fixed widths so long branch names truncate instead of stretching the diagram:

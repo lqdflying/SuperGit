@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { BranchAction, BranchInfo, RemoteBranchInfo, RemoteConfig, RemoteTracking } from "../../../shared/types";
 import { Icon, type IconName } from "../../icons";
 import { useThemeColors } from "../../ThemeProvider";
-import { branchColor, blockHeight, buildTrackingRows, remoteBranchNameFromRef, remoteColor, resolveSelectedTracking, trackingRowHeight, type TrackingRow } from "../../utils";
+import { branchColor, blockHeight, buildTrackingRows, remoteBranchNameFromRef, remoteColor, resolveSelectedTracking, trackingRowHeight, type TrackingRow, hasMissingRemoteTrackingForTarget, addUpstreamRemoteBranchName } from "../../utils";
 import { CurrentBadge } from "../badges";
 
 type TrackingStatus = "synced" | "ahead" | "behind" | "diverged" | "no-upstream" | "remote-only";
@@ -162,8 +162,52 @@ export function TrackingView({
   const deleteLocalLabel = actionBranchName ? `Delete Local ${actionBranchName}` : "Delete Local Branch";
   const deleteRemoteLabel =
     actionRemote && actionRemoteBranchName ? `Delete Remote ${actionRemote}/${actionRemoteBranchName}` : "Delete Remote Branch";
+  const needsInitialUpstream = trackingStatus === "no-upstream" || selectedTracking?.remoteRefExists === false;
   const needsPushUpstream = trackingStatus === "no-upstream" || selectedTracking?.remoteRefExists === false;
-  const setUpstreamLabel = needsPushUpstream ? "Push and Set Upstream" : "Set Upstream";
+  const configuredUpstream = selectedLocalBranch?.remotes.find((tracking) => tracking.isConfiguredUpstream);
+  const defaultUpstreamRef = configuredUpstream?.ref;
+  const hasExistingTracking = Boolean(selectedLocalBranch?.remotes.some((tracking) => tracking.remoteRefExists));
+  const addUpstreamTargetBranchName = selectedLocalBranch
+    ? addUpstreamRemoteBranchName(selectedLocalBranch, selectedTrackingRef)
+    : undefined;
+  const hasUntrackedRemotes = Boolean(
+    selectedLocalBranch &&
+      addUpstreamTargetBranchName &&
+      hasMissingRemoteTrackingForTarget(selectedLocalBranch, remotes, addUpstreamTargetBranchName)
+  );
+  const canAddRemoteTracking = Boolean(
+    !selectedRemoteOnly &&
+      actionBranchName &&
+      hasExistingTracking &&
+      remotes.length > 1 &&
+      hasUntrackedRemotes &&
+      !needsInitialUpstream
+  );
+  const remoteRowExplicitlySelected = Boolean(selectedTrackingRef);
+  const canSetDefaultUpstream = Boolean(
+    !selectedRemoteOnly &&
+      remoteRowExplicitlySelected &&
+      selectedTracking &&
+      selectedTracking.remoteRefExists &&
+      !selectedTracking.isConfiguredUpstream
+  );
+  const showDefaultUpstreamSlot = Boolean(
+    !selectedRemoteOnly &&
+      actionBranchName &&
+      (needsInitialUpstream ||
+        canSetDefaultUpstream ||
+        (remoteRowExplicitlySelected && Boolean(selectedTracking?.isConfiguredUpstream) && !canAddRemoteTracking))
+  );
+  const upstreamAction: BranchAction = needsInitialUpstream ? "set-upstream" : "set-default-upstream";
+  const upstreamLabel = needsInitialUpstream
+    ? needsPushUpstream
+      ? "Push and Set Upstream"
+      : "Set Upstream"
+    : "Set as Default Upstream";
+  const upstreamDisabled = Boolean(
+    !actionBranchName || selectedRemoteOnly || (!needsInitialUpstream && !canSetDefaultUpstream)
+  );
+  const upstreamPrimary = Boolean(needsInitialUpstream || canSetDefaultUpstream);
   const canDeleteLocal = Boolean(
     !selectedRemoteOnly && actionBranchName && !selectedLocalBranch?.isCurrent && actionBranchName !== defaultBranch
   );
@@ -193,7 +237,10 @@ export function TrackingView({
     if (!actionBranchName) {
       return;
     }
-    onBranchAction(action, actionBranchName, actionRemote, actionRemoteBranchName);
+    const remote = action === "add-upstream" ? undefined : actionRemote;
+    const remoteBranchName =
+      action === "add-upstream" ? addUpstreamTargetBranchName : actionRemoteBranchName;
+    onBranchAction(action, actionBranchName, remote, remoteBranchName);
   }
 
   function runDeleteRemote() {
@@ -295,7 +342,7 @@ export function TrackingView({
                           </span>
                           {tracking.isConfiguredUpstream && (
                             <span className="upstream-badge" style={{ color: remoteColorValue }}>
-                              upstream
+                              default
                             </span>
                           )}
                           {!tracking.remoteRefExists && (
@@ -380,6 +427,7 @@ export function TrackingView({
           <SelectionStatus
             branchName={actionBranchName}
             checkoutBranch={checkoutBranch}
+            defaultUpstreamRef={defaultUpstreamRef}
             detached={detached}
             detachedLabel={currentBranchLabel}
             status={trackingStatus}
@@ -408,13 +456,23 @@ export function TrackingView({
             onClick={() => runBranchAction("pull")}
           />
           <QuickButton icon="fetch" label="Fetch All Remotes" onClick={() => onBranchAction("fetch")} />
-          <QuickButton
-            icon="branch"
-            label={setUpstreamLabel}
-            disabled={!actionBranchName || selectedRemoteOnly}
-            primary={trackingStatus === "no-upstream" || selectedTracking?.remoteRefExists === false}
-            onClick={() => runBranchAction("set-upstream")}
-          />
+          {canAddRemoteTracking && (
+            <QuickButton
+              icon="branch"
+              label="Add Remote Tracking"
+              disabled={!actionBranchName || selectedRemoteOnly}
+              onClick={() => runBranchAction("add-upstream")}
+            />
+          )}
+          {showDefaultUpstreamSlot && (
+            <QuickButton
+              icon="branch"
+              label={upstreamLabel}
+              disabled={upstreamDisabled}
+              primary={upstreamPrimary}
+              onClick={() => runBranchAction(upstreamAction)}
+            />
+          )}
           <QuickButton icon="refresh" label="Prune Stale" onClick={() => onBranchAction("prune-stale")} />
           <QuickButton
             icon="trash"
@@ -490,6 +548,7 @@ function LegendItem({ color, label, icon, dashed, dot }: { color: string; label:
 function SelectionStatus({
   branchName,
   checkoutBranch,
+  defaultUpstreamRef,
   detached,
   detachedLabel,
   status,
@@ -499,6 +558,7 @@ function SelectionStatus({
 }: {
   branchName: string;
   checkoutBranch?: string;
+  defaultUpstreamRef?: string;
   detached: boolean;
   detachedLabel: string;
   status: TrackingStatus;
@@ -557,6 +617,9 @@ function SelectionStatus({
         headline = "Diverged from remote";
         detail = `${tracking.ahead} ahead, ${tracking.behind} behind on ${trackingRef}. Pull or rebase, then push.`;
         break;
+    }
+    if (defaultUpstreamRef && trackingRef && trackingRef !== defaultUpstreamRef) {
+      detail = `${defaultUpstreamRef} is default. ${detail}`;
     }
   }
 

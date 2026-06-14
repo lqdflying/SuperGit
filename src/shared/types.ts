@@ -115,6 +115,8 @@ export type BranchAction =
   | "pull"
   | "fetch"
   | "set-upstream"
+  | "add-upstream"
+  | "set-default-upstream"
   | "delete"
   | "delete-remote"
   | "prune-stale";

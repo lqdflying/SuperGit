@@ -317,6 +317,197 @@ describe("executeBranchAction", () => {
     expect(runGitMock).not.toHaveBeenCalled();
   });
 
+  it("add-upstream pushes without -u when the remote branch does not exist yet", async () => {
+    showWarningMessageMock.mockResolvedValue("Run");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return fail("unknown ref");
+      }
+      if (args[0] === "ls-remote") {
+        return ok("");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "add-upstream", "feature/x", "upstream");
+    expect(runGitMock).toHaveBeenCalledWith(["push", "upstream", "feature/x"], "/repo", { timeout: 120_000 });
+    expect(runGitMock).not.toHaveBeenCalledWith(["push", "-u", "upstream", "feature/x"], "/repo", { timeout: 120_000 });
+    expect(runGitMock).not.toHaveBeenCalledWith(["branch", "--set-upstream-to", "upstream/feature/x", "feature/x"], "/repo", { timeout: 120_000 });
+  });
+
+  it("add-upstream fetches an existing remote branch without setting default upstream", async () => {
+    showWarningMessageMock.mockResolvedValue("Run");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return fail("unknown ref");
+      }
+      if (args[0] === "ls-remote") {
+        return ok("abc123\trefs/heads/feature/x\n");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "add-upstream", "feature/x", "upstream");
+    expect(runGitMock).toHaveBeenCalledWith(
+      ["fetch", "upstream", "refs/heads/feature/x:refs/remotes/upstream/feature/x"],
+      "/repo",
+      { timeout: 120_000 }
+    );
+    expect(runGitMock).not.toHaveBeenCalledWith(["branch", "--set-upstream-to", expect.any(String), "feature/x"], "/repo", { timeout: 120_000 });
+  });
+
+  it("add-upstream ignores an already-tracked explicit remote and picks an untracked one", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
+    ]);
+    showWarningMessageMock.mockResolvedValue("Run");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        if (args[2] === "refs/remotes/origin/feature/remote-only") {
+          return ok("abc123\n");
+        }
+        return fail("unknown ref");
+      }
+      if (args[0] === "ls-remote") {
+        return ok("");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "add-upstream", "feature/remote-only", "origin", "feature/remote-only");
+    expect(showQuickPickMock).not.toHaveBeenCalled();
+    expect(runGitMock).toHaveBeenCalledWith(["push", "upstream", "feature/remote-only"], "/repo", { timeout: 120_000 });
+  });
+
+  it("add-upstream names the remote ref when local and remote branch names differ", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
+    ]);
+    showWarningMessageMock.mockResolvedValue("Run");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        if (args[2] === "refs/remotes/origin/feature/a") {
+          return ok("abc123\n");
+        }
+        return fail("unknown ref");
+      }
+      if (args[0] === "ls-remote") {
+        return ok("");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "add-upstream", "work", undefined, "feature/a");
+    expect(showWarningMessageMock).toHaveBeenCalledWith(
+      "Push work to upstream/feature/a without changing the default upstream?",
+      { modal: true },
+      "Run"
+    );
+    expect(runGitMock).toHaveBeenCalledWith(["push", "upstream", "work:feature/a"], "/repo", { timeout: 120_000 });
+  });
+
+  it("add-upstream reports when all remotes already track the branch", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
+    ]);
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return ok("abc123\n");
+      }
+      return ok("");
+    });
+    await expect(executeBranchAction("/repo", "add-upstream", "main")).resolves.toEqual({
+      success: true,
+      message: "main is already tracked on all configured remotes."
+    });
+    expect(showQuickPickMock).not.toHaveBeenCalled();
+    expect(runGitMock).not.toHaveBeenCalledWith(["push", expect.any(String), expect.any(String)], "/repo", { timeout: 120_000 });
+  });
+
+  it("add-upstream auto-selects when only one remote lacks local tracking", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 }
+    ]);
+    showWarningMessageMock.mockResolvedValue("Run");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        if (args[2] === "refs/remotes/origin/main") {
+          return ok("abc123\n");
+        }
+        return fail("unknown ref");
+      }
+      if (args[0] === "ls-remote") {
+        return ok("");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "add-upstream", "main");
+    expect(showQuickPickMock).not.toHaveBeenCalled();
+    expect(runGitMock).toHaveBeenCalledWith(["push", "upstream", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("add-upstream offers QuickPick when multiple remotes lack local tracking", async () => {
+    getRemotesMock.mockResolvedValue([
+      { name: "origin", url: "origin-url", colorIndex: 0 },
+      { name: "upstream", url: "upstream-url", colorIndex: 1 },
+      { name: "backup", url: "backup-url", colorIndex: 2 }
+    ]);
+    showQuickPickMock.mockResolvedValue({ label: "upstream", description: "upstream-url", remote: { name: "upstream", url: "upstream-url", colorIndex: 1 } });
+    showWarningMessageMock.mockResolvedValue("Run");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        if (args[2] === "refs/remotes/origin/main") {
+          return ok("abc123\n");
+        }
+        return fail("unknown ref");
+      }
+      if (args[0] === "ls-remote") {
+        return ok("");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "add-upstream", "main");
+    expect(showQuickPickMock).toHaveBeenCalledWith(
+      [expect.objectContaining({ label: "upstream" }), expect.objectContaining({ label: "backup" })],
+      expect.objectContaining({ title: "Add Remote Tracking" })
+    );
+    expect(runGitMock).toHaveBeenCalledWith(["push", "upstream", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("set-default-upstream requires a selected remote", async () => {
+    await expect(executeBranchAction("/repo", "set-default-upstream", "main")).resolves.toEqual({
+      success: false,
+      message: "Select a remote tracking row before setting the default upstream."
+    });
+    expect(runGitMock).not.toHaveBeenCalled();
+  });
+
+  it("set-default-upstream promotes an existing local tracking ref", async () => {
+    showWarningMessageMock.mockResolvedValue("Run");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return ok("abc123\n");
+      }
+      return ok("");
+    });
+    await executeBranchAction("/repo", "set-default-upstream", "main", "upstream");
+    expect(runGitMock).toHaveBeenCalledWith(["branch", "--set-upstream-to", "upstream/main", "main"], "/repo", { timeout: 120_000 });
+    expect(runGitMock).not.toHaveBeenCalledWith(["push", expect.any(String), expect.any(String)], "/repo", { timeout: 120_000 });
+  });
+
+  it("set-default-upstream fails when the tracking ref is not local", async () => {
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return fail("unknown ref");
+      }
+      return ok("");
+    });
+    await expect(executeBranchAction("/repo", "set-default-upstream", "main", "upstream")).resolves.toEqual({
+      success: false,
+      message: "Fetch or add remote tracking for upstream/main first."
+    });
+  });
+
   it("requires branch name before deleting", async () => {
     await expect(executeBranchAction("/repo", "delete")).resolves.toEqual({ success: false, message: "Select a branch before deleting." });
     expect(runGitMock).not.toHaveBeenCalled();

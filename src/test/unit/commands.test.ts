@@ -304,6 +304,36 @@ describe("getBranches", () => {
     expect(branches[1].remotes[0].remoteRefExists).toBe(true);
   });
 
+  it("associates remote tracking refs using the configured upstream branch name on other remotes", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {
+        return ok("work\torigin/feature/a\torigin\n");
+      }
+      if (args[0] === "for-each-ref" && args.includes("refs/remotes/")) {
+        return ok("origin/feature/a\nupstream/feature/a\n");
+      }
+      if (args[0] === "remote") {
+        return ok(
+          "origin\tgit@github.com:org/repo.git (fetch)\norigin\tgit@github.com:org/repo.git (push)\nupstream\tgit@github.com:org/upstream.git (fetch)\nupstream\tgit@github.com:org/upstream.git (push)\n"
+        );
+      }
+      if (args[0] === "branch") {
+        return ok("work\n");
+      }
+      if (args[0] === "rev-list") {
+        return ok("0\t0\n");
+      }
+      return ok("");
+    });
+
+    const branches = await getBranches("/repo");
+    expect(branches).toHaveLength(1);
+    expect(branches[0].name).toBe("work");
+    expect(branches[0].remotes.map((remote) => remote.ref).sort()).toEqual(["origin/feature/a", "upstream/feature/a"]);
+    expect(branches[0].remotes.find((remote) => remote.ref === "origin/feature/a")?.isConfiguredUpstream).toBe(true);
+    expect(branches[0].remotes.find((remote) => remote.ref === "upstream/feature/a")?.isConfiguredUpstream).toBe(false);
+  });
+
   it("marks configured upstream as missing when no remote-tracking ref exists", async () => {
     mockedRunGit.mockImplementation(async (args) => {
       if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {

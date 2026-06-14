@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTrackingRows, getActiveLaneCount, graphColumnWidth, remoteBranchNameFromRef, resolveSelectedTracking } from "../../webview/utils";
+import { buildTrackingRows, getActiveLaneCount, graphColumnWidth, hasMissingRemoteTracking, hasMissingRemoteTrackingForTarget, remoteBranchNameFromRef, resolveSelectedTracking, addUpstreamRemoteBranchName } from "../../webview/utils";
 import type { BranchInfo, CommitNode, RemoteBranchInfo } from "../../shared/types";
 
 describe("getActiveLaneCount", () => {
@@ -105,5 +105,178 @@ describe("remoteBranchNameFromRef", () => {
   it("extracts the remote branch name from a tracking ref", () => {
     expect(remoteBranchNameFromRef("origin/feature/a", "origin")).toBe("feature/a");
     expect(remoteBranchNameFromRef("origin/work", "origin")).toBe("work");
+  });
+});
+
+describe("hasMissingRemoteTrackingForTarget", () => {
+  const remotes = [
+    { name: "origin", url: "origin-url", colorIndex: 0 },
+    { name: "upstream", url: "upstream-url", colorIndex: 1 }
+  ];
+
+  const workBranch: BranchInfo = {
+    name: "work",
+    colorIndex: 0,
+    isCurrent: false,
+    remotes: [
+      {
+        remote: "origin",
+        ref: "origin/feature/a",
+        ahead: 0,
+        behind: 0,
+        isConfiguredUpstream: true,
+        remoteRefExists: true
+      },
+      {
+        remote: "upstream",
+        ref: "upstream/feature/a",
+        ahead: 0,
+        behind: 0,
+        isConfiguredUpstream: false,
+        remoteRefExists: true
+      },
+      {
+        remote: "upstream",
+        ref: "upstream/work",
+        ahead: 0,
+        behind: 0,
+        isConfiguredUpstream: false,
+        remoteRefExists: true
+      }
+    ]
+  };
+
+  it("returns false when the selected target is already tracked on every remote", () => {
+    expect(hasMissingRemoteTrackingForTarget(workBranch, remotes, "feature/a")).toBe(false);
+  });
+
+  it("returns true when the selected target is missing on at least one remote", () => {
+    expect(hasMissingRemoteTrackingForTarget(workBranch, remotes, "work")).toBe(true);
+  });
+});
+
+describe("hasMissingRemoteTracking", () => {
+  const remotes = [
+    { name: "origin", url: "origin-url", colorIndex: 0 },
+    { name: "upstream", url: "upstream-url", colorIndex: 1 }
+  ];
+
+  it("detects a missing remote branch on another remote even when that remote already has a different ref", () => {
+    const branch: BranchInfo = {
+      name: "work",
+      colorIndex: 0,
+      isCurrent: false,
+      remotes: [
+        {
+          remote: "origin",
+          ref: "origin/feature/a",
+          ahead: 0,
+          behind: 0,
+          isConfiguredUpstream: true,
+          remoteRefExists: true
+        },
+        {
+          remote: "upstream",
+          ref: "upstream/work",
+          ahead: 0,
+          behind: 0,
+          isConfiguredUpstream: false,
+          remoteRefExists: true
+        }
+      ]
+    };
+    expect(hasMissingRemoteTracking(branch, remotes)).toBe(true);
+  });
+
+  it("returns false when every remote has the target branch names", () => {
+    const branch: BranchInfo = {
+      name: "feature/single-remote",
+      colorIndex: 0,
+      isCurrent: false,
+      remotes: [
+        {
+          remote: "origin",
+          ref: "origin/feature/single-remote",
+          ahead: 0,
+          behind: 0,
+          isConfiguredUpstream: true,
+          remoteRefExists: true
+        },
+        {
+          remote: "upstream",
+          ref: "upstream/feature/single-remote",
+          ahead: 0,
+          behind: 0,
+          isConfiguredUpstream: false,
+          remoteRefExists: true
+        }
+      ]
+    };
+    expect(hasMissingRemoteTracking(branch, remotes)).toBe(false);
+  });
+
+  it("returns true when only one remote tracks the branch in a multi-remote repo", () => {
+    const branch: BranchInfo = {
+      name: "feature/single-remote",
+      colorIndex: 0,
+      isCurrent: false,
+      remotes: [
+        {
+          remote: "origin",
+          ref: "origin/feature/single-remote",
+          ahead: 0,
+          behind: 0,
+          isConfiguredUpstream: true,
+          remoteRefExists: true
+        }
+      ]
+    };
+    expect(hasMissingRemoteTracking(branch, remotes)).toBe(true);
+    expect(hasMissingRemoteTrackingForTarget(branch, remotes, "feature/single-remote")).toBe(true);
+  });
+
+  it("returns true when tracking exists without a configured default upstream", () => {
+    const branch: BranchInfo = {
+      name: "feature/remote-only",
+      colorIndex: 0,
+      isCurrent: false,
+      remotes: [
+        {
+          remote: "origin",
+          ref: "origin/feature/remote-only",
+          ahead: 0,
+          behind: 0,
+          isConfiguredUpstream: false,
+          remoteRefExists: true
+        }
+      ]
+    };
+    expect(hasMissingRemoteTrackingForTarget(branch, remotes, "feature/remote-only")).toBe(true);
+  });
+});
+
+describe("addUpstreamRemoteBranchName", () => {
+  const branch: BranchInfo = {
+    name: "work",
+    colorIndex: 0,
+    isCurrent: false,
+    remotes: [
+      {
+        remote: "origin",
+        ref: "origin/feature/a",
+        ahead: 0,
+        behind: 0,
+        isConfiguredUpstream: true,
+        remoteRefExists: true
+      }
+    ]
+  };
+
+  it("uses the local branch name when only the local branch pill is selected", () => {
+    expect(addUpstreamRemoteBranchName(branch)).toBe("work");
+  });
+
+  it("uses the selected remote row branch name when a tracking ref is selected", () => {
+    expect(addUpstreamRemoteBranchName(branch, "origin/feature/a")).toBe("feature/a");
   });
 });

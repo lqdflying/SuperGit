@@ -1,4 +1,4 @@
-import type { BranchInfo, BranchLifecycle, BranchLifecycleStatus, CommitNode, RemoteBranchInfo, RemoteTracking } from "../shared/types";
+import type { BranchInfo, BranchLifecycle, BranchLifecycleStatus, CommitNode, RemoteBranchInfo, RemoteConfig, RemoteTracking } from "../shared/types";
 import { graph } from "../shared/tokens";
 import type { ThemeColors } from "../shared/themeColors";
 
@@ -68,6 +68,49 @@ export function remoteBranchNameFromRef(ref: string, remote: string): string {
   }
   const slash = ref.indexOf("/");
   return slash >= 0 ? ref.slice(slash + 1) : ref;
+}
+
+/** Local branch name plus configured-upstream remote branch name (for multi-remote tracking targets). */
+export function remoteBranchNameTargets(branch: BranchInfo): string[] {
+  const names = new Set<string>([branch.name]);
+  const configured = branch.remotes.find((tracking) => tracking.isConfiguredUpstream);
+  if (configured) {
+    names.add(remoteBranchNameFromRef(configured.ref, configured.remote));
+  }
+  return [...names];
+}
+
+export function hasMissingRemoteTrackingForTarget(
+  branch: BranchInfo,
+  remotes: RemoteConfig[],
+  remoteBranchName: string
+): boolean {
+  if (remotes.length <= 1) {
+    return false;
+  }
+  const trackedRefs = new Set(branch.remotes.filter((tracking) => tracking.remoteRefExists).map((tracking) => tracking.ref));
+  return remotes.some((remote) => !trackedRefs.has(`${remote.name}/${remoteBranchName}`));
+}
+
+/** @deprecated Prefer hasMissingRemoteTrackingForTarget with the selected add-upstream target. */
+export function hasMissingRemoteTracking(branch: BranchInfo, remotes: RemoteConfig[]): boolean {
+  if (remotes.length <= 1) {
+    return false;
+  }
+  return remoteBranchNameTargets(branch).some((target) => hasMissingRemoteTrackingForTarget(branch, remotes, target));
+}
+
+export function addUpstreamRemoteBranchName(branch: BranchInfo | undefined, selectedTrackingRef?: string): string | undefined {
+  if (!branch) {
+    return undefined;
+  }
+  if (selectedTrackingRef) {
+    const selected = branch.remotes.find((tracking) => tracking.ref === selectedTrackingRef);
+    if (selected) {
+      return remoteBranchNameFromRef(selected.ref, selected.remote);
+    }
+  }
+  return branch.name;
 }
 
 export function resolveSelectedTracking(branch: BranchInfo | undefined, selectedTrackingRef?: string): RemoteTracking | undefined {

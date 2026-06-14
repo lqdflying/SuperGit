@@ -115,7 +115,23 @@ Implementation: `src/webview/components/tracking/TrackingView.tsx`
 - Row table fixed widths (fit-content, no stretch): local **228px**, tracks **170px**, remotes **272px** — `.tracking-table-wrap { width: fit-content }`
 - Remote color dot: **`.remote-chip-dot`** only — never `.remote-chip span` (crushes `.remote-chip-default`)
 - Pills/rows need explicit themed backgrounds (`var(--sg-bg3)`); global `button { background: transparent }` makes them look white
-- Colored dots in `.branch-dot`; `current` / `upstream` tiny-pills stay inside pills
+- Colored dots in `.branch-dot`; `current` / `default` tiny-pills stay inside pills
+
+### Multi-remote upstream (Tracking)
+
+Git has one default upstream; SuperGit shows multiple remote-tracking refs per branch when they exist locally.
+
+| UI state | Upstream slot | Second button |
+|----------|---------------|---------------|
+| `no-upstream` | Push and Set Upstream / Set Upstream (`set-upstream`) | — |
+| Has default + untracked remotes in repo | hidden/disabled until non-default row selected | **Add Remote Tracking** (`add-upstream`) |
+| Selected tracked row, not default | **Set as Default Upstream** (`set-default-upstream`, primary) | Add Remote Tracking if applicable |
+| Selected default row | Set as Default Upstream (disabled) | Add Remote Tracking if applicable |
+
+`canAddRemoteTracking` gates on `hasMissingRemoteTrackingForTarget()` using the same target branch name as `add-upstream` (`addUpstreamRemoteBranchName`: local pill → local branch name; explicit remote row → that row's branch name). Requires at least one existing `remoteRefExists` tracking ref, not only a configured default upstream. Clicking the local branch pill alone shows Add; **Set as Default Upstream** requires an explicit remote-row selection.
+
+- `add-upstream` QuickPick lists only remotes without local `refs/remotes/<remote>/<branch>`. Webview passes `remote: undefined` for `add-upstream` (keeps `remoteBranchName`); action layer also ignores an already-tracked explicit remote.
+- Selection status notes default ref when viewing a non-default row (e.g. `origin/main is default. …`).
 
 ### Default branch indicator
 

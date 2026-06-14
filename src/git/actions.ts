@@ -150,6 +150,10 @@ export async function executeBranchAction(
     }
     case "set-upstream":
       return executeSetUpstream(cwd, branchName, remote, remoteBranchName);
+    case "add-upstream":
+      return executeAddUpstream(cwd, branchName, remote, remoteBranchName);
+    case "set-default-upstream":
+      return executeSetDefaultUpstream(cwd, branchName, remote, remoteBranchName);
     case "delete": {
       if (!branchName) {
         return { success: false, message: "Select a branch before deleting." };
@@ -434,6 +438,130 @@ async function executeSetUpstream(
     pushSetUpstreamCommand(parsed.remote, branch, parsed.branch),
     `Pushed ${branch} and set upstream to ${upstream}.`
   );
+}
+
+async function executeAddUpstream(
+  cwd: string,
+  branchName?: string,
+  remote?: string,
+  remoteBranchName?: string
+): Promise<ActionResult> {
+  const branch = branchName || (await getCurrentBranch(cwd));
+  if (branch.startsWith("DETACHED")) {
+    return { success: false, message: "Cannot add remote tracking while in detached HEAD." };
+  }
+
+  const remoteBranch = resolveRemoteBranchName(branch, remoteBranchName);
+  let targetRemote = remote;
+  if (targetRemote) {
+    const alreadyTracked = await localRemoteTrackingRefExists(cwd, targetRemote, remoteBranch);
+    if (alreadyTracked) {
+      targetRemote = undefined;
+    }
+  }
+  const remoteChoice = await resolveAddUpstreamRemoteChoice(cwd, branch, targetRemote, remoteBranch);
+  if (remoteChoice.cancelled) {
+    return { success: false, message: "Add remote tracking cancelled." };
+  }
+  if (!remoteChoice.remote) {
+    return { success: true, message: `${branch} is already tracked on all configured remotes.` };
+  }
+
+  const chosenRemote = remoteChoice.remote;
+  const remoteRef = formatRemoteRef(chosenRemote, remoteBranch);
+  const hasLocalTrackingRef = await localRemoteTrackingRefExists(cwd, chosenRemote, remoteBranch);
+  if (hasLocalTrackingRef) {
+    return { success: true, message: `${branch} is already tracked on ${remoteRef}.` };
+  }
+
+  const existsOnRemote = await remoteBranchExistsOnRemote(cwd, chosenRemote, remoteBranch);
+  if (existsOnRemote) {
+    return runGuarded(
+      cwd,
+      `Fetch ${remoteRef} without changing the default upstream?`,
+      fetchRemoteTrackingRefCommand(chosenRemote, remoteBranch),
+      `Now tracking ${branch} on ${remoteRef}.`
+    );
+  }
+
+  return runGuarded(
+    cwd,
+    `Push ${branch} to ${remoteRef} without changing the default upstream?`,
+    pushCommand(chosenRemote, branch, remoteBranchName),
+    `Pushed ${branch} to ${remoteRef}.`
+  );
+}
+
+async function executeSetDefaultUpstream(
+  cwd: string,
+  branchName?: string,
+  remote?: string,
+  remoteBranchName?: string
+): Promise<ActionResult> {
+  if (!remote) {
+    return { success: false, message: "Select a remote tracking row before setting the default upstream." };
+  }
+
+  const branch = branchName || (await getCurrentBranch(cwd));
+  if (branch.startsWith("DETACHED")) {
+    return { success: false, message: "Cannot set default upstream while in detached HEAD." };
+  }
+
+  const remoteBranch = resolveRemoteBranchName(branch, remoteBranchName);
+  const upstream = formatRemoteRef(remote, remoteBranch);
+  const hasLocalTrackingRef = await localRemoteTrackingRefExists(cwd, remote, remoteBranch);
+  if (!hasLocalTrackingRef) {
+    return { success: false, message: `Fetch or add remote tracking for ${upstream} first.` };
+  }
+
+  return runGuarded(
+    cwd,
+    `Set default upstream for ${branch} to ${upstream}?`,
+    ["branch", "--set-upstream-to", upstream, branch],
+    `Default upstream for ${branch} is now ${upstream}.`
+  );
+}
+
+async function resolveAddUpstreamRemoteChoice(
+  cwd: string,
+  branch: string,
+  remote: string | undefined,
+  remoteBranch: string
+): Promise<{ cancelled: boolean; remote?: string }> {
+  if (remote) {
+    return { cancelled: false, remote };
+  }
+
+  const remotes = await getRemotes(cwd);
+  const available: RemoteConfig[] = [];
+  for (const candidate of remotes) {
+    const exists = await localRemoteTrackingRefExists(cwd, candidate.name, remoteBranch);
+    if (!exists) {
+      available.push(candidate);
+    }
+  }
+
+  if (available.length === 0) {
+    return { cancelled: false };
+  }
+  if (available.length === 1) {
+    return { cancelled: false, remote: available[0].name };
+  }
+
+  const items: Array<vscode.QuickPickItem & { remote: RemoteConfig }> = available.map((candidate) => ({
+    label: candidate.name,
+    description: candidate.url,
+    remote: candidate
+  }));
+  const picked = await vscode.window.showQuickPick(items, {
+    title: "Add Remote Tracking",
+    placeHolder: "Choose remote to track"
+  });
+  if (!picked) {
+    return { cancelled: true };
+  }
+
+  return { cancelled: false, remote: picked.remote.name };
 }
 
 async function executeDeleteRemoteCommand(cwd: string, remote: string, remoteBranch: string): Promise<ActionResult> {

@@ -596,6 +596,8 @@ async function runBranchAction(
         action === "delete" ||
         action === "delete-remote" ||
         action === "set-upstream" ||
+        action === "add-upstream" ||
+        action === "set-default-upstream" ||
         action === "fetch" ||
         action === "prune-stale"
       ) {

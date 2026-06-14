@@ -3,7 +3,7 @@ import type { BranchInfo, CommitFileChange, DateRange, HistoryScope, RemoteBranc
 import { DEFAULT_HISTORY_SCOPE, PAGE_SIZE } from "../shared/types";
 import { colors } from "../shared/tokens";
 import { getActiveRepository } from "./api";
-import { GIT_LOG_FORMAT, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes, isRemoteHeadRef, findRemoteForRef } from "./parser";
+import { GIT_LOG_FORMAT, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes, parseUpstreamRef, isRemoteHeadRef, findRemoteForRef } from "./parser";
 import { clearRemoteDefaultBranchCache } from "./remote-default";
 import { runGit } from "./runner";
 
@@ -153,13 +153,15 @@ export async function getBranches(cwd: string): Promise<BranchInfo[]> {
       }
 
       for (const remote of remotes) {
-        const ref = `${remote.name}/${branch.name}`;
-        if (remoteRefs.has(ref)) {
-          candidates.set(ref, {
-            remote: remote.name,
-            ref,
-            isConfiguredUpstream: candidates.get(ref)?.isConfiguredUpstream ?? false
-          });
+        for (const remoteBranchName of remoteBranchNameCandidates(branch.name, branch.upstreamRef, remoteNames)) {
+          const ref = `${remote.name}/${remoteBranchName}`;
+          if (remoteRefs.has(ref)) {
+            candidates.set(ref, {
+              remote: remote.name,
+              ref,
+              isConfiguredUpstream: candidates.get(ref)?.isConfiguredUpstream ?? false
+            });
+          }
         }
       }
 
@@ -401,6 +403,17 @@ function filterCommits(commits: Awaited<ReturnType<typeof parseCommits>>, search
       .toLowerCase();
     return haystack.includes(query);
   });
+}
+
+function remoteBranchNameCandidates(localBranchName: string, upstreamRef: string | undefined, remoteNames: string[]): string[] {
+  const candidates = new Set<string>([localBranchName]);
+  if (upstreamRef) {
+    const parsed = parseUpstreamRef(upstreamRef, remoteNames);
+    if (parsed?.branch) {
+      candidates.add(parsed.branch);
+    }
+  }
+  return [...candidates];
 }
 
 function formatGitError(prefix: string, stderr: string, timedOut: boolean): string {
