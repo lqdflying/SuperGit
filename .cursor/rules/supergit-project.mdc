@@ -9,7 +9,7 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 
 ## Source of truth
 
-- Product behavior/UI: **`.cursor/rules/supergit-*.mdc`** (this file + scoped rules below). Do not rely on deleted `Design/` mockups.
+- Product behavior/UI: **`.cursor/rules/supergit-*.mdc`** (this file + scoped rules below). [`Design/`](../Design/) is optional mockup scratch space only — not runtime source of truth.
 - Commit graph: `supergit-commit-graph.mdc`
 - Webview/CSP/panel: `supergit-webview.mdc`
 - Branch history: `supergit-branch-history.mdc`
@@ -61,7 +61,7 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 ## Agent policy
 
 - Read only this repo's guidance; do not import unrelated project memories
-- **UI/design specs:** update `.cursor/rules/supergit-*.mdc` only — do **not** add `Design/` mockups, JSX prototypes, or standalone coding proposals; the retired `Design/` folder must not be recreated
+- **UI/design specs:** `.cursor/rules/supergit-*.mdc` are canonical; `Design/` may hold exploratory mockups — merge approved behavior into rules before shipping
 - Do not infer log events not visible in summaries; add diagnostics instead
 - Before claiming refresh/reload fixes, verify log **counts** per `supergit-refresh-coordination.mdc` (not just presence of one skip/coalesce line)
 - Search VS Code Server logs narrowly by session and extension name
