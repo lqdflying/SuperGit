@@ -117,6 +117,7 @@ export type BranchAction =
   | "set-upstream"
   | "add-upstream"
   | "set-default-upstream"
+  | "checkout-new-local-branch"
   | "delete"
   | "delete-remote"
   | "prune-stale";

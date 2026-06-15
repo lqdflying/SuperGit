@@ -760,6 +760,119 @@ describe("executeBranchAction", () => {
     await expect(executeBranchAction("/repo", "push", "main")).resolves.toEqual({ success: false, message: "Push cancelled." });
     expect(runGitMock).not.toHaveBeenCalled();
   });
+
+  it("checks out a new local branch from a selected local branch", async () => {
+    showInputBoxMock.mockResolvedValue("feature/new-work");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "check-ref-format") {
+        return ok("");
+      }
+      return ok("");
+    });
+
+    await expect(executeBranchAction("/repo", "checkout-new-local-branch", "main")).resolves.toEqual({
+      success: true,
+      message: "Checked out new branch feature/new-work."
+    });
+    expect(runGitMock).toHaveBeenCalledWith(["check-ref-format", "--branch", "feature/new-work"], "/repo", { timeout: 120_000 });
+    expect(runGitMock).toHaveBeenCalledWith(["checkout", "-b", "feature/new-work", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("checks out a new local branch tracking an explicit remote branch", async () => {
+    showInputBoxMock.mockResolvedValue("feature/from-remote");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return ok("abc123\n");
+      }
+      if (args[0] === "check-ref-format") {
+        return ok("");
+      }
+      return ok("");
+    });
+
+    await expect(
+      executeBranchAction("/repo", "checkout-new-local-branch", "work", "origin", "feature/a")
+    ).resolves.toEqual({
+      success: true,
+      message: "Checked out new branch feature/from-remote."
+    });
+    expect(runGitMock).toHaveBeenCalledWith(
+      ["checkout", "-b", "feature/from-remote", "--track", "origin/feature/a"],
+      "/repo",
+      { timeout: 120_000 }
+    );
+  });
+
+  it("prefills remote branch name when checking out from a remote source", async () => {
+    showInputBoxMock.mockResolvedValue("feature/x");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return ok("abc123\n");
+      }
+      if (args[0] === "check-ref-format") {
+        return ok("");
+      }
+      return ok("");
+    });
+
+    await executeBranchAction("/repo", "checkout-new-local-branch", "feature/x", "origin", "feature/x");
+    expect(showInputBoxMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: "feature/x",
+        prompt: "New local branch tracking origin/feature/x"
+      })
+    );
+  });
+
+  it("cancels checkout new branch when input is dismissed", async () => {
+    showInputBoxMock.mockResolvedValue(undefined);
+    await expect(executeBranchAction("/repo", "checkout-new-local-branch", "main")).resolves.toEqual({
+      success: false,
+      message: "Checkout new branch cancelled."
+    });
+    expect(runGitMock).not.toHaveBeenCalledWith(["checkout", "-b", expect.any(String), "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("rejects invalid branch names before checkout", async () => {
+    showInputBoxMock.mockResolvedValue("bad..name");
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "check-ref-format") {
+        return fail("fatal: bad branch name");
+      }
+      return ok("");
+    });
+
+    await expect(executeBranchAction("/repo", "checkout-new-local-branch", "main")).resolves.toEqual({
+      success: false,
+      message: "Invalid branch name: bad..name"
+    });
+    expect(runGitMock).not.toHaveBeenCalledWith(["checkout", "-b", "bad..name", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("fails when remote tracking ref is not available locally", async () => {
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return fail("unknown ref");
+      }
+      return ok("");
+    });
+
+    await expect(
+      executeBranchAction("/repo", "checkout-new-local-branch", "feature/x", "origin", "feature/x")
+    ).resolves.toEqual({
+      success: false,
+      message: "Remote tracking ref origin/feature/x is not available locally. Fetch the remote branch first."
+    });
+    expect(showInputBoxMock).not.toHaveBeenCalled();
+  });
+
+  it("requires a selected branch for local-source checkout", async () => {
+    await expect(executeBranchAction("/repo", "checkout-new-local-branch")).resolves.toEqual({
+      success: false,
+      message: "Select a branch before checking out a new branch."
+    });
+    expect(showInputBoxMock).not.toHaveBeenCalled();
+  });
 });
 
 function ok(stdout: string): GitResult {

@@ -154,6 +154,8 @@ export async function executeBranchAction(
       return executeAddUpstream(cwd, branchName, remote, remoteBranchName);
     case "set-default-upstream":
       return executeSetDefaultUpstream(cwd, branchName, remote, remoteBranchName);
+    case "checkout-new-local-branch":
+      return executeCheckoutNewLocalBranch(cwd, branchName, remote, remoteBranchName);
     case "delete": {
       if (!branchName) {
         return { success: false, message: "Select a branch before deleting." };
@@ -240,6 +242,74 @@ export async function executeBranchAction(
     case "prune-stale":
       return executePruneStale(cwd, remote);
   }
+}
+
+async function executeCheckoutNewLocalBranch(
+  cwd: string,
+  branchName?: string,
+  remote?: string,
+  remoteBranchName?: string
+): Promise<ActionResult> {
+  const usesRemoteSource = Boolean(remote && remoteBranchName);
+
+  if (usesRemoteSource) {
+    const hasLocalRef = await localRemoteTrackingRefExists(cwd, remote!, remoteBranchName!);
+    if (!hasLocalRef) {
+      return {
+        success: false,
+        message: `Remote tracking ref ${formatRemoteRef(remote!, remoteBranchName!)} is not available locally. Fetch the remote branch first.`
+      };
+    }
+
+    const upstream = formatRemoteRef(remote!, remoteBranchName!);
+    const newName = await vscode.window.showInputBox({
+      title: "Checkout New Branch",
+      prompt: `New local branch tracking ${upstream}`,
+      placeHolder: "feature/new-work",
+      value: remoteBranchName
+    });
+    if (!newName) {
+      return { success: false, message: "Checkout new branch cancelled." };
+    }
+    if (!(await isValidBranchName(cwd, newName))) {
+      return { success: false, message: `Invalid branch name: ${newName}` };
+    }
+
+    return runGuarded(
+      cwd,
+      `Create and checkout ${newName} tracking ${upstream}?`,
+      ["checkout", "-b", newName, "--track", upstream],
+      `Checked out new branch ${newName}.`
+    );
+  }
+
+  if (!branchName) {
+    return { success: false, message: "Select a branch before checking out a new branch." };
+  }
+
+  const newName = await vscode.window.showInputBox({
+    title: "Checkout New Branch",
+    prompt: `New local branch from ${branchName}`,
+    placeHolder: "feature/new-work"
+  });
+  if (!newName) {
+    return { success: false, message: "Checkout new branch cancelled." };
+  }
+  if (!(await isValidBranchName(cwd, newName))) {
+    return { success: false, message: `Invalid branch name: ${newName}` };
+  }
+
+  return runGuarded(
+    cwd,
+    `Create and checkout ${newName} from ${branchName}?`,
+    ["checkout", "-b", newName, branchName],
+    `Checked out new branch ${newName}.`
+  );
+}
+
+async function isValidBranchName(cwd: string, name: string): Promise<boolean> {
+  const result = await runGit(["check-ref-format", "--branch", name], cwd, { timeout: 120_000 });
+  return result.exitCode === 0;
 }
 
 async function executePruneStale(cwd: string, remote?: string): Promise<ActionResult> {

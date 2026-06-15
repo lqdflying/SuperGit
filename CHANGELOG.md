@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.4.0 - 2026-06-15
+
+### Added
+
+- **Checkout New Branch** in Branch Tracking: create and switch to a new local branch from the selected local branch, remote tracking row, or remote-only ref (`checkout-new-local-branch`).
+- Local pill source uses `git checkout -b <new> <sourceBranch>`; remote source uses `git checkout -b <new> --track <remote>/<branch>` with branch-name validation via `git check-ref-format --branch`.
+- Unit tests for local/remote checkout paths, cancellation, invalid names, and stale remote refs.
+
+### Changed
+
+- Documented Checkout New Branch semantics in `.cursor/rules/supergit-webview.mdc`, `supergit-project.mdc`, and `AGENTS.md` — distinct from remote-only **Create Local Branch** (`pull` fetch without checkout).
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (226 tests)
+- `npm run build`
+- `npm run package`
+
 ## 1.3.0 - 2026-06-14
 
 ### Added

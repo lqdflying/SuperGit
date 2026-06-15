@@ -107,6 +107,8 @@ Implementation: `src/webview/components/tracking/TrackingView.tsx`
 | no-upstream | disabled | disabled; highlight Set Upstream |
 | remote-only | disabled | primary (Create Local Branch) |
 
+- **Checkout New Branch** (`checkout-new-local-branch`): always available when selection is valid. Local pill → branch from selected local ref; explicit remote row or remote-only row → branch with `--track remote/branch`. Disabled when a stale remote row is selected (`remoteRefExists === false`); click the local pill to branch from local instead. Separate from Create Local Branch (pull/fetch without checkout).
+
 - Show `tracking-selection-status` card: `local → remote/ref` + recommendation
 - Use `.quick-button.primary` for recommended action(s)
 

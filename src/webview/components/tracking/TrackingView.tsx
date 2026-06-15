@@ -220,6 +220,18 @@ export function TrackingView({
       (selectedRemoteOnly || selectedTrackingRef) &&
       (selectedRemoteOnly || selectedTracking?.remoteRefExists)
   );
+  const checkoutUsesRemoteSource = Boolean(
+    selectedRemoteOnly || (remoteRowExplicitlySelected && selectedTracking?.remoteRefExists)
+  );
+  const checkoutRemote = checkoutUsesRemoteSource ? actionRemote : undefined;
+  const checkoutRemoteBranchName = checkoutUsesRemoteSource ? actionRemoteBranchName : undefined;
+  const canCheckoutNewLocalBranch = Boolean(
+    selectedRemoteOnly
+      ? selectedRemoteBranch
+      : remoteRowExplicitlySelected
+        ? selectedTracking?.remoteRefExists && actionRemote && actionRemoteBranchName
+        : actionBranchName
+  );
 
   function selectLocalBranch(branchName: string, trackingRef?: string) {
     setSelectedBranchName(branchName);
@@ -248,6 +260,19 @@ export function TrackingView({
       return;
     }
     onBranchAction("delete-remote", actionBranchName, actionRemote, actionRemoteBranchName);
+  }
+
+  function runCheckoutNewLocalBranch() {
+    if (!canCheckoutNewLocalBranch) {
+      return;
+    }
+    if (checkoutUsesRemoteSource && checkoutRemote && checkoutRemoteBranchName) {
+      onBranchAction("checkout-new-local-branch", actionBranchName, checkoutRemote, checkoutRemoteBranchName);
+      return;
+    }
+    if (actionBranchName) {
+      onBranchAction("checkout-new-local-branch", actionBranchName);
+    }
   }
 
   const hasRemoteOnlySection = remoteOnlyRows.length > 0;
@@ -454,6 +479,12 @@ export function TrackingView({
             disabled={!canPull}
             primary={pullPrimary}
             onClick={() => runBranchAction("pull")}
+          />
+          <QuickButton
+            icon="plus"
+            label="Checkout New Branch"
+            disabled={!canCheckoutNewLocalBranch}
+            onClick={runCheckoutNewLocalBranch}
           />
           <QuickButton icon="fetch" label="Fetch All Remotes" onClick={() => onBranchAction("fetch")} />
           {canAddRemoteTracking && (

@@ -69,6 +69,14 @@ When a branch is selected, derive status from the chosen tracking ref (upstream 
 - Use `.quick-button.primary` for the recommended action(s).
 - Do not leave generic "Push Current" / "Pull Current" copy once selection exists.
 
+### Checkout New Branch
+
+- Quick action **`Checkout New Branch`** (`checkout-new-local-branch`) — always enabled when selection is valid (not tied to sync status).
+- **Local pill** (no explicit remote row): prompt → `git checkout -b <newName> <selectedLocalBranch>`.
+- **Explicit remote row** or **remote-only row**: prompt (prefill remote branch name) → `git checkout -b <newName> --track <remote>/<branch>`; requires local `refs/remotes/<remote>/<branch>`.
+- **Stale remote row** (`remoteRefExists === false`): button disabled; user clicks local pill to branch from local instead.
+- Separate from **Create Local Branch** on remote-only rows (`pull` fetch refspec) — that creates/updates a local ref without switching checkout.
+
 ### Multi-remote upstream (fork workflow)
 
 When a branch already has a default upstream and the repo has multiple remotes:
@@ -117,6 +125,15 @@ Fix in `src/git/actions.ts`:
 - Non-checked-out branch: `git fetch <remote> <branch>:<branch>` (fast-forward only; no `+` force)
 
 Add/keep a unit test for the non-checked-out pull path in `src/test/unit/actions.test.ts`.
+
+### Checkout New Local Branch (`checkout-new-local-branch`)
+
+Branch Tracking quick action to create and switch to a new local branch from the current selection:
+
+- Local source: `git checkout -b <newName> <sourceBranch>` after `git check-ref-format --branch`.
+- Remote source: `git checkout -b <newName> --track <remote>/<branch>` when local remote-tracking ref exists.
+- Webview passes `remote` + `remoteBranchName` only when user explicitly selected a remote row or remote-only row — not when only the local pill is selected.
+- Classified as ref-changing in `refreshPolicy.ts`; list-only remote cache invalidation (not remote-default invalidating).
 
 ### Refresh After Branch Actions
 
@@ -177,7 +194,7 @@ Fine-tuning notes for `src/webview/components/history/` and `src/git/branch-life
 ### Actions & refresh
 
 Same `execute-branch-action` contract as Tracking — always pass `branchName` and `remote`.
-Out of scope v1: rebase, PR, checkout, copy name, detail panel resize, cross-tab graph navigation.
+Out of scope v1: rebase, PR, branch checkout from graph/history, copy name, detail panel resize, cross-tab graph navigation.
 
 ### Layout & theme
 

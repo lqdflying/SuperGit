@@ -20,6 +20,7 @@ describe("shouldInvalidateRemoteDefaultBranches", () => {
     expect(shouldInvalidateRemoteDefaultBranches("push")).toBe(false);
     expect(shouldInvalidateRemoteDefaultBranches("pull")).toBe(false);
     expect(shouldInvalidateRemoteDefaultBranches("set-upstream")).toBe(false);
+    expect(shouldInvalidateRemoteDefaultBranches("checkout-new-local-branch")).toBe(false);
     expect(shouldInvalidateRemoteDefaultBranches("delete")).toBe(false);
   });
 });
@@ -37,6 +38,7 @@ describe("shouldMarkBranchHistoryDirty", () => {
     expect(shouldMarkBranchHistoryDirty("add-upstream")).toBe(true);
     expect(shouldMarkBranchHistoryDirty("push")).toBe(true);
     expect(shouldMarkBranchHistoryDirty("fetch")).toBe(true);
+    expect(shouldMarkBranchHistoryDirty("checkout-new-local-branch")).toBe(true);
   });
 });
 
@@ -44,6 +46,7 @@ describe("shouldReloadCommitsAfterAction", () => {
   it("returns true for ref-changing branch actions", () => {
     expect(shouldReloadCommitsAfterAction("add-upstream")).toBe(true);
     expect(shouldReloadCommitsAfterAction("set-default-upstream")).toBe(true);
+    expect(shouldReloadCommitsAfterAction("checkout-new-local-branch")).toBe(true);
   });
 });
 

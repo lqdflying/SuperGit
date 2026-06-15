@@ -9,6 +9,7 @@ const REF_CHANGING_ACTIONS = new Set<BranchAction>([
   "set-upstream",
   "add-upstream",
   "set-default-upstream",
+  "checkout-new-local-branch",
   "delete",
   "delete-remote",
   "prune-stale"
