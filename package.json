@@ -23,8 +23,7 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "workspaceContains:.git",
-    "onCommand:superGit.show"
+    "workspaceContains:.git"
   ],
   "main": "./dist/extension.js",
   "extensionDependencies": [
