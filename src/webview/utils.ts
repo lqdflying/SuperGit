@@ -1,4 +1,4 @@
-import type { BranchInfo, BranchLifecycle, BranchLifecycleStatus, CommitNode, RemoteBranchInfo, RemoteConfig, RemoteTracking } from "../shared/types";
+import type { BranchInfo, CommitNode, FilesDiffRef, RemoteBranchInfo, RemoteConfig, RemoteTracking } from "../shared/types";
 import { graph } from "../shared/tokens";
 import type { ThemeColors } from "../shared/themeColors";
 
@@ -201,51 +201,83 @@ export function formatRelativeFetched(value?: string): string {
   return `Last fetched: ${date.toLocaleDateString()}`;
 }
 
-export function sortBranchLifecycles(lifecycles: BranchLifecycle[], defaultBranch: string): BranchLifecycle[] {
-  const severityOrder = { severe: 0, high: 1, mild: 2 };
-  const statusOrder: Record<BranchLifecycleStatus, number> = { diverged: 0, active: 1, "remote-only": 2, merged: 3 };
-
-  return [...lifecycles].sort((a, b) => {
-    if (a.name === defaultBranch) {
-      return -1;
+export function buildFilesDiffRefs(
+  branches: BranchInfo[],
+  remoteBranches: RemoteBranchInfo[],
+  remotes: RemoteConfig[]
+): FilesDiffRef[] {
+  const refs: FilesDiffRef[] = [];
+  const seen = new Set<string>();
+  for (const branch of branches) {
+    if (seen.has(branch.name)) {
+      continue;
     }
-    if (b.name === defaultBranch) {
-      return 1;
-    }
+    seen.add(branch.name);
+    refs.push({
+      kind: "local",
+      ref: branch.name,
+      label: branch.name,
+      branchName: branch.name,
+      colorIndex: branch.colorIndex,
+      isCurrent: branch.isCurrent
+    });
+  }
 
-    const statusDiff = statusOrder[a.status] - statusOrder[b.status];
-    if (statusDiff !== 0) {
-      return statusDiff;
+  const remoteByName = new Map(remotes.map((remote) => [remote.name, remote]));
+  for (const remoteBranch of remoteBranches) {
+    if (seen.has(remoteBranch.ref)) {
+      continue;
     }
+    seen.add(remoteBranch.ref);
+    const remote = remoteByName.get(remoteBranch.remote);
+    refs.push({
+      kind: "remote",
+      ref: remoteBranch.ref,
+      label: remoteBranch.ref,
+      branchName: remoteBranch.branchName,
+      remote: remoteBranch.remote,
+      colorIndex: remoteBranch.colorIndex,
+      isDefault: remote?.defaultBranch === remoteBranch.branchName
+    });
+  }
 
-    if (a.status === "diverged" && b.status === "diverged") {
-      const sevA = a.severity ? severityOrder[a.severity] : 99;
-      const sevB = b.severity ? severityOrder[b.severity] : 99;
-      if (sevA !== sevB) {
-        return sevA - sevB;
-      }
-    }
-
-    if (a.status === "remote-only" && b.status === "remote-only") {
-      const remoteCmp = (a.remote ?? "").localeCompare(b.remote ?? "");
-      if (remoteCmp !== 0) {
-        return remoteCmp;
-      }
-      return a.name.localeCompare(b.name);
-    }
-
-    if (a.status === "merged" && b.status === "merged") {
-      return b.endDay - a.endDay;
-    }
-
-    return b.startDay - a.startDay;
-  });
+  return refs;
 }
 
-export function formatHistoryDayLabel(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
+export function resolveFilesDiffDefaults(
+  branches: BranchInfo[],
+  remoteBranches: RemoteBranchInfo[],
+  remotes: RemoteConfig[],
+  currentBranch: string,
+  defaultBranch: string
+): { leftRef: string; rightRef: string } {
+  const refs = buildFilesDiffRefs(branches, remoteBranches, remotes);
+  const localRefs = refs.filter((ref) => ref.kind === "local");
+  const left =
+    localRefs.find((ref) => ref.isCurrent) ??
+    localRefs.find((ref) => ref.ref === currentBranch) ??
+    localRefs[0] ??
+    refs[0];
+  const leftRef = left?.ref ?? "";
+  const leftBranch = branches.find((branch) => branch.name === leftRef);
+
+  const configuredUpstream = leftBranch?.remotes.find((tracking) => tracking.isConfiguredUpstream && tracking.remoteRefExists);
+  const configuredRef = configuredUpstream && refs.some((ref) => ref.ref === configuredUpstream.ref) ? configuredUpstream.ref : undefined;
+  const remoteDefaultRef = findRemoteDefaultRef(refs, remotes, defaultBranch);
+  const fallback = refs.find((ref) => ref.ref !== leftRef)?.ref ?? "";
+  const candidate = configuredRef ?? remoteDefaultRef ?? fallback;
+  const rightRef = candidate && candidate !== leftRef ? candidate : fallback;
+
+  return { leftRef, rightRef };
+}
+
+function findRemoteDefaultRef(refs: FilesDiffRef[], remotes: RemoteConfig[], defaultBranch: string): string | undefined {
+  for (const remote of remotes) {
+    const branchName = remote.defaultBranch ?? defaultBranch;
+    const ref = refs.find((candidate) => candidate.kind === "remote" && candidate.remote === remote.name && candidate.branchName === branchName);
+    if (ref) {
+      return ref.ref;
+    }
   }
-  return `${date.toLocaleString("en", { month: "short" })} ${date.getDate()}`;
+  return refs.find((ref) => ref.kind === "remote" && ref.branchName === defaultBranch)?.ref;
 }

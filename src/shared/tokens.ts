@@ -27,13 +27,6 @@ export const colors = {
   tagFg: "#d2a8ff",
   currentBadge: "#f85149",
   currentBadgeBg: "rgba(248,81,73,0.13)",
-  historyGrid: "#21262d",
-  historyGridWeek: "#30363d",
-  historyMerged: "#8b949e",
-  historyStale: "#484f58",
-  historyWarn: "#d29922",
-  historyDanger: "#f85149",
-  historyOk: "#3fb950",
   defaultBranch: "#d29922"
 } as const;
 

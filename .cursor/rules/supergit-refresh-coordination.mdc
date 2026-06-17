@@ -26,7 +26,6 @@ Any path that runs slow ref-mutating Git (`fetch --all --prune`, push, pull, pru
 | `loadInitialData` | Dedupe in-flight promise; log `coalesced with in-flight load` |
 | `enrichRemoteDefaultsInBackground` | Check inflight map **before** bumping generation; key = `root + sorted remote names` |
 | Apply enriched remotes | Post only when `key === latestEnrichRemoteDefaultsKey` (handles A→B→A coalesce edge) |
-| `loadBranchHistory` | Bump `branchHistoryLoadGeneration` on start; post data and clear `branch-history` loading only when `generation === branchHistoryLoadGeneration` (overlapping tab entry + post-action reload) |
 
 Do **not** increment enrichment generation on coalesced return — that skips valid in-flight results.
 
@@ -48,16 +47,6 @@ Do **not** increment enrichment generation on coalesced return — that skips va
 
 Log check after `add-upstream` on Tracking tab: `enrichRemoteDefaults start` **0**, `remote default branches enriched` **0**.
 
-### Branch history cache
-
-`src/extension/branchHistoryCache.ts` — key = `root + dateRange`. `loadBranchHistory` posts cache hit immediately (`branch history cache hit`); skips post when `activeWebviewTab !== "history"` (`branch history post skipped; tab inactive`).
-
-**Invalidate on full reload:** `loadInitialDataInner` calls `markBranchHistoryDirty(root)` **before** the parallel `Promise.all` reload (bumps per-root cache epoch eagerly — even if a reload leg fails, stale cache is never served). After the reload succeeds, inline `loadBranchHistory` runs when History tab is active so Refresh on History posts fresh data.
-
-In-flight history loads capture `getBranchHistoryCacheEpoch(root)` before `getBranchLifecycles()`; they discard results and skip `setBranchHistoryCache` when the epoch changes mid-flight (`branch history result discarded; cache epoch changed`).
-
-After ref-changing **branch actions** when History tab inactive: `markBranchHistoryDirty(root)` only — no inline `getBranchLifecycles`. Reload on next History visit or when History tab active at action end.
-
 ### Commit graph dirty deferral
 
 `commitGraphDirty` + `commitGraphDirtyEpoch` on extension host. After ref-changing actions when Graph tab inactive: skip `loadCommits`, set dirty + bump epoch, log `loadCommits deferred; graph tab inactive`. On `tab-changed` to `"graph"` while dirty → reload commits once. **`loadCommits` clears `commitGraphDirty` only when `commitGraphDirtyEpoch` is unchanged since the load started** — prevents an older in-flight request-commits from clearing a newer dirty mark set by a branch action during its execution.
@@ -68,7 +57,7 @@ Without dirty deferral, skipping post-action `loadCommits` would leave stale ref
 
 **Post-action reload:** `fetch` and `prune-stale` must eventually refresh commits (inline on Graph tab, or via `commitGraphDirty` on return). `delete-remote` must reload branches, remotes, and commits.
 
-**Branch history after actions:** Gate inline reload with `shouldReloadBranchHistoryAfterAction(actionTab, currentTab)`; otherwise `shouldMarkBranchHistoryDirty(action)` when applicable. Classifiers live in `src/extension/refreshPolicy.ts`.
+**Files Diff after actions:** When Files Diff is active and a comparison has been requested, successful branch actions reload `loadFilesDiff(leftRef, rightRef)` after branch/remotes refresh. The tab compares cached refs; title-bar Refresh fetches/prunes first, then reloads the active comparison.
 
 ## Webview commit requests (`App.tsx`)
 
@@ -101,14 +90,13 @@ After `add-upstream` on **Branch Tracking** tab:
 | `enrichRemoteDefaults start` | 0 |
 | `remote default branches enriched` | 0 |
 | `loadCommits deferred; graph tab inactive` | 1 (if Graph inactive) |
-| `branch history marked dirty` | 1 (if History inactive) |
 
-History tab round-trip (same date range, no intervening ref action):
+Files Diff tab round-trip:
 
 | Invariant | Expected |
 |-----------|----------|
-| `branch history cache hit` | 1 on second visit |
-| `loadBranchHistory start` | 0 on cache hit |
+| `request-files-diff` | posted when left/right refs become valid or change |
+| `files diff loaded` | 1 after each comparison request |
 
 Also test **overlap**: Prune Stale immediately followed by title-bar Refresh.
 

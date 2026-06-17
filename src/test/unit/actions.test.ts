@@ -38,12 +38,9 @@ vi.mock("../../git/runner", () => ({
 vi.mock("../../git/commands", () => ({
   getCurrentBranch: getCurrentBranchMock,
   getRemotes: getRemotesMock,
-  unsetStaleUpstreamLinks: unsetStaleUpstreamLinksMock
-}));
-
-vi.mock("../../git/branch-lifecycle", () => ({
   resolveDefaultBranch: resolveDefaultBranchMock,
-  isBranchMergedInto: isBranchMergedIntoMock
+  isBranchMergedInto: isBranchMergedIntoMock,
+  unsetStaleUpstreamLinks: unsetStaleUpstreamLinksMock
 }));
 
 vi.mock("../../git/remote-default", () => ({

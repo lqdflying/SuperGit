@@ -1,8 +1,7 @@
 import * as vscode from "vscode";
 import type { BranchAction, CommitAction, RemoteConfig } from "../shared/types";
-import { isBranchMergedInto, resolveDefaultBranch } from "./branch-lifecycle";
 import { resolveRemoteDefaultBranch } from "./remote-default";
-import { getCurrentBranch, getRemotes, unsetStaleUpstreamLinks } from "./commands";
+import { getCurrentBranch, getRemotes, isBranchMergedInto, resolveDefaultBranch, unsetStaleUpstreamLinks } from "./commands";
 import { runGit } from "./runner";
 
 export interface ActionResult {

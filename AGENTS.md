@@ -8,7 +8,7 @@ These notes capture the practical lessons from building and debugging the SuperG
 - **Source of truth for product behavior/UI:** `.cursor/rules/supergit-*.mdc`. Optional mockups may live in `Design/` for exploration; absorb approved design into rules before implementation.
   - Commit graph / swimlanes: `supergit-commit-graph.mdc`
   - Webview / CSP / tabs: `supergit-webview.mdc`
-  - Branch history: `supergit-branch-history.mdc`
+  - Files diff: `supergit-files-diff.mdc`
   - Project-wide: `supergit-project.mdc`
 - Use assets from `assets/`:
   - `assets/icon.png` for the extension/package/panel icon.
@@ -21,7 +21,7 @@ These notes capture the practical lessons from building and debugging the SuperG
   - dark VS Code-native webview
   - commit graph tab
   - branch tracking tab
-  - branch history tab
+  - files diff tab
   - multi-remote visibility
   - guarded Git actions
   - compact, tool-like UI, not a landing page
@@ -141,14 +141,13 @@ After successful branch actions in `runBranchAction` (`src/extension.ts`), refre
 
 1. `invalidateRemoteDataCaches(root, { defaultBranches: shouldInvalidateRemoteDefaultBranches(action) })`
 2. `Promise.all([loadBranches(root), loadRemotes(root, { enrichDefaults: shouldEnrichRemoteDefaultsAfterAction(action) })])`
-3. History: `loadBranchHistory` inline when tab active, else `markBranchHistoryDirty(root)` only
-4. Commits: `loadCommits` inline when Graph tab active, else set `commitGraphDirty` + bump `commitGraphDirtyEpoch`
+3. Commits: `loadCommits` inline when Graph tab active, else set `commitGraphDirty` + bump `commitGraphDirtyEpoch`
+4. Files Diff: `loadFilesDiff` inline when the Files Diff tab is active and a comparison is selected
 
 **Action classifiers** in `refreshPolicy.ts`:
 
 - `shouldInvalidateRemoteDefaultBranches` / `shouldEnrichRemoteDefaultsAfterAction` — `fetch`, `prune-stale`, `delete-remote` only (these can change remote HEAD or remote list)
-- `shouldMarkBranchHistoryDirty` / `shouldReloadCommitsAfterAction` — all ref-changing actions
-- `shouldReloadBranchHistoryAfterAction(actionTab, currentTab)` — either is `"history"`
+- `shouldReloadCommitsAfterAction` — all ref-changing actions
 
 Pass explicit `branchName` and `remote` from the webview through `execute-branch-action` so actions target the selected row, not only the checked-out branch.
 
@@ -156,67 +155,23 @@ Pass explicit `branchName` and `remote` from the webview through `execute-branch
 
 When async operations can race with state-mutating events:
 
-1. **Branch History cache epoch** (`branchHistoryCache.ts`): `markBranchHistoryDirty` bumps per-root epoch. In-flight `loadBranchHistory` captures epoch before `getBranchLifecycles()`; discards result if epoch changed mid-flight — prevents stale data from overwriting a clean cache entry.
-
-2. **Commit graph dirty epoch** (`commitGraphDirtyEpoch`): bumped when `commitGraphDirty = true`. `loadCommits` captures epoch at start and only clears dirty if unchanged at end — prevents older in-flight `request-commits` from clearing a newer dirty mark.
-
-3. **Branch history load generation** (`branchHistoryLoad.ts`): guards concurrent `loadBranchHistory` calls; only the latest generation posts results.
+1. **Commit graph dirty epoch** (`commitGraphDirtyEpoch`): bumped when `commitGraphDirty = true`. `loadCommits` captures epoch at start and only clears dirty if unchanged at end — prevents older in-flight `request-commits` from clearing a newer dirty mark.
 
 **Pattern:** capture epoch/generation before `await`, check after `await`, skip writes/posts if stale. Never unconditionally clear state flags after async work.
 
-## Branch History UX Lessons
+## Files Diff UX Lessons
 
-Fine-tuning notes for `src/webview/components/history/` and `src/git/branch-lifecycle.ts`. Full rules: `.cursor/rules/supergit-branch-history.mdc`.
+Fine-tuning notes for `src/webview/components/files/FilesDiffTab.tsx` and related Git diff wiring. Full rules: `.cursor/rules/supergit-files-diff.mdc`.
 
-### Tab & data loading
-
-- Third tab: `useState<"graph" | "branches" | "history">` in `App.tsx`; icon `history` in `icons.tsx`.
-- **Lazy load** branch history — post `request-branch-history` when `tab === "history"` only (debounced ~150ms); do not block graph startup with `loadInitialData`.
-- **Branch history cache** (`src/extension/branchHistoryCache.ts`): key = `root + dateRange`. Cache hit returns instantly; dirty mark + epoch prevent stale data.
-- Shared `dateRange` from `App.tsx` applies to graph and history; switching tabs does not reset it.
-- **First visit promotion:** on first switch to history, if `dateRange` is still default `7d`, call `setPreset(30)` once (persist flag in `getState()`).
-- History **All** uses `resolveHistoryDateWindow` with a **90-day cap** — not the graph's unbounded All.
-- **Full reload (`loadInitialData`)** marks history dirty **before** `Promise.all` so even partial failures invalidate cache. Inline history reload only after success when History tab active.
-
-### Selection & lanes
-
-- Default selection: checked-out branch if visible → else first diverged lane → else default branch.
-- `.current` = checked out; `.selected` = detail/quick-actions target.
-- Sort in webview via `sortBranchLifecycles`: default branch → diverged (by severity) → active → remote-only → merged.
-- Remote-only refs from `getRemoteBranches()` where `!localBranchName`: dashed lane, no ghost track, status `remote-only`.
-
-### Ghost track & remotes
-
-- Ghost track renders only for **diverged** local branches (faded main progression since LCA).
-- Remote markers: triangle when pushed; unpushed bracket when `behindLocal > 0`.
-- Per-remote divergence (`divergePerRemote`): commits behind each `{remote}/{defaultBranch}`.
-
-### Actions & refresh
-
-Same `execute-branch-action` contract as Tracking — always pass `branchName` and `remote`.
-Out of scope v1: rebase, PR, branch checkout from graph/history, copy name, detail panel resize, cross-tab graph navigation.
-
-### Layout & theme
-
-- Timeline constants: `LABEL_W=220`, `DAY_W=30`, detail panel `320px` (`.branch-history-detail`).
-- History tokens: `--sg-history-*` in `media/styles.css`; read in `theme.ts` / `ThemeProvider`.
-- **Light theme:** darken `--sg-history-*` under `body.vscode-light`; selected lane labels use `--selection-fg`; raise opacity on lane labels/hashes/LCA in `GhostTrack` / `BranchLane`.
-- SVG: use theme colors from `useThemeColors()`; avoid invalid SVG attrs like `color-mix` — use `fillOpacity` / `strokeOpacity`.
-
-### Native date picker theming
-
-`DateRangeBar` uses `<input type="date">`. The calendar popup is native UI — style with:
-
-- `body.vscode-dark` / `vscode-light` → `color-scheme: dark|light` in CSS
-- `.date-input` with `--vscode-input-*` vars and `color-scheme: inherit`
-- `applyNativeColorScheme()` in `theme.ts`, synced from `ThemeProvider` on theme change
-
-### Tests
-
-- `branch-status.test.ts` — TC-BH01..BH08, `generateDescription`
-- `branch-lifecycle.test.ts` — TC-BH09..BH13, `getBranchLifecycles` with mocked `runGit`
-- Vitest coverage excludes `src/git/diffProvider.ts` (VS Code integration, untested in unit suite)
-- Watch for `mockResolvedValueOnce` leaking unconsumed mocks between tests (use `mockReset()` in `beforeEach`)
+- Third tab: `WebviewTab = "files"`; label **Files Diff**; icon `filesDiff`.
+- Compare any two local or remote refs from `branches-data` / `remoteBranches`.
+- Use cached refs only. Do not fetch automatically before comparing; title-bar Refresh fetches/prunes and reloads active data.
+- Default left ref: checked-out local branch. Default right ref: configured upstream when available, then remote default branch, then first different ref.
+- Use direct tip comparison: `git diff <leftRef> <rightRef>`, not merge-base `A...B`.
+- Data comes from paired `git diff --name-status -M` and `git diff --numstat -M`; pair rows by order to avoid brittle compact rename path parsing.
+- Summary tally: files, additions, deletions, renamed, binary.
+- Per-file open uses `vscode.diff` with the `supergit:` content provider; added/deleted sides use empty virtual documents.
+- Keep selectors/table dense and stable; truncate long refs/paths instead of stretching the layout.
 
 ## Graph Tab UX Lessons
 
@@ -244,16 +199,13 @@ Fine-tuning notes for commit graph/detail work. Full swimlane + table rules: `.c
   - `src/git/runner.ts` runs Git CLI commands with timeouts and noninteractive env.
   - `src/git/parser.ts` parses Git stdout.
   - `src/git/commands.ts` exposes higher-level read models.
-  - `src/git/branch-lifecycle.ts` + `src/git/branch-status.ts` — Branch History lifecycles and status.
   - `src/git/actions.ts` handles guarded write actions.
 - Performance / coordination layer:
   - `src/extension/refreshPolicy.ts` — action classifiers (enrichment, invalidation, dirty marking).
-  - `src/extension/branchHistoryCache.ts` — per-root keyed cache with dirty/epoch.
-  - `src/extension/branchHistoryLoad.ts` — generation guard for concurrent loads.
 - Webview:
   - `src/webview/main.tsx` mounts React.
   - `src/webview/App.tsx` owns app state and message handling.
-  - `src/webview/components/graph/` — commit graph; `tracking/` — branch tracking; `history/` — branch history.
+  - `src/webview/components/graph/` — commit graph; `tracking/` — branch tracking; `files/` — files diff.
   - `media/styles.css` contains the webview CSS.
 - Shared contracts:
   - `src/shared/types.ts`
@@ -304,22 +256,19 @@ This setting can be placed in VS Code Settings JSON. Debug output goes to the `S
 
 1. **Selective invalidation** — classify actions by impact; only invalidate/re-enrich what's necessary. `refreshPolicy.ts` centralizes action → effect mapping.
 2. **Deferred loading** — don't reload inactive tabs. Set a dirty flag + epoch and reload on next tab activation.
-3. **Cache with dirty invalidation** — Branch History uses a per-root keyed cache. `markBranchHistoryDirty(root)` bumps epoch; next read sees dirty and reloads.
-4. **Epoch guards for async races** — capture epoch/generation before `await`; discard result if stale after `await`. Apply to any async that can be superseded by a newer event.
-5. **Skip expensive network probes** — optional `skipRemoteProbe` setting removes `ls-remote` from `add-upstream` preflight.
+3. **Epoch guards for async races** — capture epoch/generation before `await`; discard result if stale after `await`. Apply to any async that can be superseded by a newer event.
+4. **Skip expensive network probes** — optional `skipRemoteProbe` setting removes `ls-remote` from `add-upstream` preflight.
 
 ### Common anti-patterns to avoid
 
 - Clearing a dirty/loading flag **before** the async that consumes it completes (prevents retry on failure).
 - Unconditional `enrichRemoteDefaults` after every action — `ls-remote --symref` per remote is 1–3s each.
-- Calling `loadBranchHistory` inline on every `runBranchAction` success even when History tab is not active.
 - Using `localRemoteTrackingRefExists()` before `ls-remote` — both are network-latency-class. Remove the redundant pre-check.
 - Boolean dirty flags without epochs — a slow in-flight load can clear a newer dirty signal.
 
 ### Test coverage expectations
 
 - `src/test/unit/refresh-policy.test.ts` — all classifiers.
-- `src/test/unit/branch-history-cache.test.ts` — cache hit/miss, dirty mark, epoch guard.
 - `src/test/unit/remote-default.test.ts` — selective invalidation (`defaultBranches: false`).
 - `src/test/unit/actions.test.ts` — `add-upstream` QuickPick, `set-default-upstream`, skip-remote-probe.
 
@@ -687,9 +636,9 @@ npm run package
 
 Current expected unit status:
 
-- 219 tests passing across 14 test files.
+- 169 tests passing across 9 test files.
 - Coverage above the design target for `src/git/*.ts` (`diffProvider.ts` excluded).
-- Key test files: `actions.test.ts`, `refresh-policy.test.ts`, `branch-history-cache.test.ts`, `remote-default.test.ts`, `utils.test.ts`, `parser.test.ts`, `branch-lifecycle.test.ts`, `branch-status.test.ts`.
+- Key test files: `actions.test.ts`, `commands.test.ts`, `refresh-policy.test.ts`, `remote-default.test.ts`, `utils.test.ts`, `parser.test.ts`.
 
 `npm run test:integration` may fail in managed containers because Electron cannot start before extension load due to sandbox/display restrictions. Report this clearly instead of treating it as a product failure.
 
@@ -761,4 +710,4 @@ Expected included files (verify with `unzip -l supergit-*.vsix`):
    remotes loaded
    ```
 
-6. If any stage is missing, debug from that boundary. On Branch History tab, also expect `branch-history-data` after `request-branch-history`.
+6. If any stage is missing, debug from that boundary. On Files Diff tab, also expect `files-diff-data` after `request-files-diff`.

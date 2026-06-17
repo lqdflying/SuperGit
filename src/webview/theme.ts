@@ -53,13 +53,6 @@ export function readThemeColors(root: HTMLElement = document.documentElement): T
     currentBadge: readVar(styles, "--sg-current-badge", fallbackColors.currentBadge),
     currentBadgeBg: readVar(styles, "--sg-current-badge-bg", fallbackColors.currentBadgeBg),
     buttonFg: readVar(styles, "--sg-button-fg", "#ffffff"),
-    historyGrid: readVar(styles, "--sg-history-grid", fallbackColors.historyGrid),
-    historyGridWeek: readVar(styles, "--sg-history-grid-week", fallbackColors.historyGridWeek),
-    historyMerged: readVar(styles, "--sg-history-merged", fallbackColors.historyMerged),
-    historyStale: readVar(styles, "--sg-history-stale", fallbackColors.historyStale),
-    historyWarn: readVar(styles, "--sg-history-warn", fallbackColors.historyWarn),
-    historyDanger: readVar(styles, "--sg-history-danger", fallbackColors.historyDanger),
-    historyOk: readVar(styles, "--sg-history-ok", fallbackColors.historyOk),
     defaultBranch: readVar(styles, "--sg-default-branch", fallbackColors.defaultBranch)
   };
 }

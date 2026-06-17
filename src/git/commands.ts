@@ -1,10 +1,10 @@
 import * as path from "node:path";
-import type { BranchInfo, CommitFileChange, DateRange, HistoryScope, RemoteBranchInfo, RemoteConfig, RepositoryState } from "../shared/types";
+import type { BranchInfo, CommitFileChange, DateRange, FilesDiffPayload, HistoryScope, RemoteBranchInfo, RemoteConfig, RepositoryState } from "../shared/types";
 import { DEFAULT_HISTORY_SCOPE, PAGE_SIZE } from "../shared/types";
 import { colors } from "../shared/tokens";
 import { getActiveRepository } from "./api";
-import { GIT_LOG_FORMAT, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes, parseUpstreamRef, isRemoteHeadRef, findRemoteForRef } from "./parser";
-import { clearRemoteDefaultBranchCache } from "./remote-default";
+import { GIT_LOG_FORMAT, parseCommits, parseFilesDiff, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes, parseUpstreamRef, isRemoteHeadRef, findRemoteForRef } from "./parser";
+import { clearRemoteDefaultBranchCache, resolveRemoteDefaultBranch } from "./remote-default";
 import { runGit } from "./runner";
 
 export async function getCommits(
@@ -293,6 +293,28 @@ export async function getCurrentBranch(cwd: string): Promise<string> {
   return detached.exitCode === 0 ? `DETACHED ${detached.stdout.trim()}` : "DETACHED";
 }
 
+export async function resolveDefaultBranch(cwd: string, options: { network?: boolean } = {}): Promise<string> {
+  const fromOrigin = await resolveRemoteDefaultBranch(cwd, "origin", { network: options.network === true });
+  if (fromOrigin) {
+    return fromOrigin;
+  }
+
+  for (const candidate of ["main", "master"]) {
+    const exists = await runGit(["rev-parse", "--verify", candidate], cwd);
+    if (exists.exitCode === 0) {
+      return candidate;
+    }
+  }
+
+  const branches = await getBranches(cwd);
+  return branches[0]?.name ?? "main";
+}
+
+export async function isBranchMergedInto(cwd: string, branchRef: string, defaultBranch: string): Promise<boolean> {
+  const result = await runGit(["merge-base", "--is-ancestor", branchRef, defaultBranch], cwd);
+  return result.exitCode === 0;
+}
+
 export async function getRepositoryState(cwd?: string): Promise<RepositoryState> {
   const activeRepository = await getActiveRepository();
   const root = cwd || activeRepository?.root || null;
@@ -345,6 +367,38 @@ export async function getCommitFileChanges(cwd: string, commitHash: string): Pro
   return {
     baseHash,
     files: parseNameStatus(result.stdout)
+  };
+}
+
+export async function getFilesDiff(cwd: string, leftRef: string, rightRef: string): Promise<FilesDiffPayload> {
+  if (leftRef === rightRef) {
+    const empty = parseFilesDiff("", "");
+    return {
+      leftRef,
+      rightRef,
+      files: empty.files,
+      summary: empty.summary
+    };
+  }
+
+  const [nameStatusResult, numstatResult] = await Promise.all([
+    runGit(["diff", "--name-status", "-M", leftRef, rightRef], cwd),
+    runGit(["diff", "--numstat", "-M", leftRef, rightRef], cwd)
+  ]);
+
+  if (nameStatusResult.exitCode !== 0) {
+    throw new Error(formatGitError("git files diff failed", nameStatusResult.stderr, nameStatusResult.timedOut));
+  }
+  if (numstatResult.exitCode !== 0) {
+    throw new Error(formatGitError("git files diff stats failed", numstatResult.stderr, numstatResult.timedOut));
+  }
+
+  const parsed = parseFilesDiff(nameStatusResult.stdout, numstatResult.stdout);
+  return {
+    leftRef,
+    rightRef,
+    files: parsed.files,
+    summary: parsed.summary
   };
 }
 

@@ -4,7 +4,7 @@ import { useThemeColors } from "./ThemeProvider";
 export type IconName =
   | "branch"
   | "commit"
-  | "history"
+  | "filesDiff"
   | "tag"
   | "merge"
   | "remote"
@@ -24,6 +24,7 @@ export type IconName =
   | "x"
   | "copy"
   | "plus"
+  | "swap"
   | "trash"
   | "defaultBranch";
 
@@ -66,14 +67,11 @@ export function Icon({ type, size = 14, color, style }: IconProps): ReactElement
         <line x1="8" y1="11" x2="8" y2="15" />
       </>
     ),
-    history: (
+    filesDiff: (
       <>
-        <line x1="2" y1="4" x2="14" y2="4" />
-        <line x1="2" y1="8" x2="14" y2="8" />
-        <line x1="2" y1="12" x2="14" y2="12" />
-        <circle cx="5" cy="4" r="1.2" fill={strokeColor} />
-        <circle cx="10" cy="8" r="1.2" fill={strokeColor} />
-        <circle cx="7" cy="12" r="1.2" fill={strokeColor} />
+        <path d="M3 2.5h4l2 2H13v9H3z" />
+        <line x1="5" y1="7" x2="11" y2="7" />
+        <line x1="5" y1="10" x2="9" y2="10" />
       </>
     ),
     tag: (
@@ -171,6 +169,14 @@ export function Icon({ type, size = 14, color, style }: IconProps): ReactElement
       <>
         <line x1="8" y1="3" x2="8" y2="13" />
         <line x1="3" y1="8" x2="13" y2="8" />
+      </>
+    ),
+    swap: (
+      <>
+        <path d="M4 5h8" />
+        <polyline points="9,2 12,5 9,8" />
+        <path d="M12 11H4" />
+        <polyline points="7,8 4,11 7,14" />
       </>
     ),
     trash: (

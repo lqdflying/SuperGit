@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.0.0 - 2026-06-17
+
+### Breaking
+
+- Removed the Branch History tab and its timeline/caching data path. Branch divergence and sync state remain available in Branch Tracking.
+
+### Added
+
+- **Files Diff** tab: compare any two local or remote branch refs using cached refs and direct `git diff <leftRef> <rightRef>` comparison.
+- Changed-file tally with file count, additions, deletions, renamed files, binary file count, and status-aware changed-file rows.
+- Per-file opening through VS Code's native side-by-side diff editor using the existing `supergit:` content provider.
+- Files Diff product rules, docs, screenshot, parser/read-model tests, and webview utility tests.
+
+### Changed
+
+- SuperGit's third tab is now Files Diff: Commit Graph, Branch Tracking, Files Diff.
+- Branch action refresh reloads the active Files Diff comparison when applicable.
+- Package description and README now describe branch file comparisons.
+- Removed obsolete Branch History components, Git lifecycle/status code, cache/generation helpers, styles, tests, rules, and screenshot asset.
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (169 tests)
+- `npm run build`
+- `npm run package`
+
 ## 1.4.0 - 2026-06-15
 
 ### Added

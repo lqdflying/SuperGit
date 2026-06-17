@@ -52,7 +52,7 @@ rg -n "react/jsx-runtime" dist/webview/main.js          # should match
 
 ## Webview log stages (debug boundaries)
 
-`webview html loaded` → … → `branches loaded` → `remotes loaded` → (History tab) `branch-history-data`
+`webview html loaded` → … → `branches loaded` → `remotes loaded` → (Files Diff tab) `files-diff-data`
 
 ## Commit load sync (`App.tsx`)
 
@@ -151,6 +151,6 @@ Git has one default upstream; SuperGit shows multiple remote-tracking refs per b
 
 ### Theme
 
-## Branch history tab UX
+## Files Diff tab UX
 
-Implementation: `src/webview/components/history/` · full rules: `supergit-branch-history.mdc`
+Implementation: `src/webview/components/files/FilesDiffTab.tsx` · full rules: `supergit-files-diff.mdc`

@@ -46,4 +46,4 @@ rg -n "webview:|command invoked|creating SuperGit|error|warn|failed" ~/.vscode-s
 
 ## UI failure checklist
 
-Enable debug → reload → open SuperGit → `SuperGit: Show Logs` → confirm full stage chain through `commits loaded`, `branches loaded`, `remotes loaded`. On Branch History tab: `request-branch-history` → `branch-history-data`. Debug from the first missing stage.
+Enable debug → reload → open SuperGit → `SuperGit: Show Logs` → confirm full stage chain through `commits loaded`, `branches loaded`, `remotes loaded`. On Files Diff tab: `request-files-diff` → `files-diff-data`. Debug from the first missing stage.

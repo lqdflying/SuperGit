@@ -1,4 +1,4 @@
-import type { BranchAction, WebviewTab } from "../shared/types";
+import type { BranchAction } from "../shared/types";
 
 const REMOTE_DEFAULT_INVALIDATING_ACTIONS = new Set<BranchAction>(["fetch", "prune-stale", "delete-remote"]);
 
@@ -23,17 +23,6 @@ export function shouldEnrichRemoteDefaultsAfterAction(action: BranchAction): boo
   return shouldInvalidateRemoteDefaultBranches(action);
 }
 
-export function shouldMarkBranchHistoryDirty(action: BranchAction): boolean {
-  return REF_CHANGING_ACTIONS.has(action);
-}
-
 export function shouldReloadCommitsAfterAction(action: BranchAction): boolean {
   return REF_CHANGING_ACTIONS.has(action);
-}
-
-export function shouldReloadBranchHistoryAfterAction(
-  actionTab: WebviewTab | undefined,
-  currentTab: WebviewTab
-): boolean {
-  return actionTab === "history" || currentTab === "history";
 }

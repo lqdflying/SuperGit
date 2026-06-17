@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildTrackingRows, getActiveLaneCount, graphColumnWidth, hasMissingRemoteTracking, hasMissingRemoteTrackingForTarget, remoteBranchNameFromRef, resolveSelectedTracking, addUpstreamRemoteBranchName } from "../../webview/utils";
-import type { BranchInfo, CommitNode, RemoteBranchInfo } from "../../shared/types";
+import { buildFilesDiffRefs, buildTrackingRows, getActiveLaneCount, graphColumnWidth, hasMissingRemoteTracking, hasMissingRemoteTrackingForTarget, remoteBranchNameFromRef, resolveFilesDiffDefaults, resolveSelectedTracking, addUpstreamRemoteBranchName } from "../../webview/utils";
+import type { BranchInfo, CommitNode, RemoteBranchInfo, RemoteConfig } from "../../shared/types";
 
 describe("getActiveLaneCount", () => {
   it("uses one lane for linear main-only history", () => {
@@ -63,6 +63,51 @@ describe("buildTrackingRows", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toEqual({ kind: "local", branch: branches[0] });
     expect(rows[1]).toEqual({ kind: "remote-only", remoteBranch: remoteBranches[1] });
+  });
+});
+
+describe("files diff refs", () => {
+  const branches: BranchInfo[] = [
+    {
+      name: "main",
+      colorIndex: 0,
+      isCurrent: true,
+      remotes: [
+        { remote: "origin", ref: "origin/main", ahead: 0, behind: 0, isConfiguredUpstream: true, remoteRefExists: true }
+      ]
+    },
+    { name: "feature/x", colorIndex: 1, isCurrent: false, remotes: [] }
+  ];
+  const remoteBranches: RemoteBranchInfo[] = [
+    { remote: "origin", branchName: "main", ref: "origin/main", colorIndex: 0, localBranchName: "main" },
+    { remote: "origin", branchName: "feature/x", ref: "origin/feature/x", colorIndex: 0, localBranchName: "feature/x" },
+    { remote: "upstream", branchName: "main", ref: "upstream/main", colorIndex: 1 }
+  ];
+  const remotes: RemoteConfig[] = [
+    { name: "origin", url: "origin-url", colorIndex: 0, defaultBranch: "main" },
+    { name: "upstream", url: "upstream-url", colorIndex: 1, defaultBranch: "main" }
+  ];
+
+  it("builds local and remote branch options with current/default metadata", () => {
+    const refs = buildFilesDiffRefs(branches, remoteBranches, remotes);
+    expect(refs.map((ref) => ref.ref)).toEqual(["main", "feature/x", "origin/main", "origin/feature/x", "upstream/main"]);
+    expect(refs.find((ref) => ref.ref === "main")?.isCurrent).toBe(true);
+    expect(refs.find((ref) => ref.ref === "origin/main")?.isDefault).toBe(true);
+  });
+
+  it("defaults to the current branch and its configured upstream", () => {
+    expect(resolveFilesDiffDefaults(branches, remoteBranches, remotes, "main", "main")).toEqual({
+      leftRef: "main",
+      rightRef: "origin/main"
+    });
+  });
+
+  it("falls back to a remote default branch when no upstream is configured", () => {
+    const noUpstream = branches.map((branch) => ({ ...branch, remotes: [] }));
+    expect(resolveFilesDiffDefaults(noUpstream, remoteBranches, remotes, "feature/x", "main")).toEqual({
+      leftRef: "main",
+      rightRef: "origin/main"
+    });
   });
 });
 

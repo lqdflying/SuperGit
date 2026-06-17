@@ -1,0 +1,33 @@
+---
+description: Files Diff tab branch comparison behavior and UI rules
+globs: src/webview/components/files/**,src/git/commands.ts,src/git/parser.ts,src/extension.ts,src/shared/types.ts,media/styles.css
+alwaysApply: false
+---
+
+# Files Diff Tab
+
+Files Diff is the third SuperGit tab after Commit Graph and Branch Tracking.
+
+## Behavior
+
+- Compare any two local or remote branch refs shown by `getBranches()` and `getRemoteBranches()`.
+- Use cached refs only. Do **not** fetch automatically before comparing; the existing title-bar Refresh fetches/prunes and then reloads active data.
+- Default left ref: checked-out local branch.
+- Default right ref: configured upstream for the left branch when present and locally available; otherwise a remote default branch; otherwise first different ref.
+- Direct tip comparison only: `git diff <leftRef> <rightRef>`, not merge-base `A...B`.
+- File list data comes from paired `git diff --name-status -M` and `git diff --numstat -M`.
+- Per-file opening uses `vscode.diff` through the `supergit:` content provider. Added/deleted sides use empty virtual documents.
+
+## UI
+
+- Keep the tab dense and operational: two selectors, swap button, compare button, compact ref chips, summary tally, and changed-file table.
+- Summary shows changed files, additions, deletions, renamed files, and binary files.
+- Table rows show status, path, old path for renames/copies, additions/deletions or binary, and open affordance.
+- Use stable table columns and truncate long paths/branch refs; do not let names stretch the layout.
+- Do not render inline patch hunks in v1; use VS Code native diff for content review.
+
+## Refresh
+
+- Webview posts `request-files-diff { leftRef, rightRef }` when valid refs become selected or change.
+- Extension posts `files-diff-data { diff }`.
+- Successful branch actions reload the active Files Diff comparison when Files Diff is the current tab.

@@ -4,14 +4,14 @@ import {
   DEFAULT_HISTORY_SCOPE,
   PAGE_SIZE,
   type BranchAction,
-  type BranchHistoryWindow,
   type BranchInfo,
-  type BranchLifecycle,
   type CommitAction,
   type CommitFileChange,
   type CommitNode,
   type DateRange,
   type ExtHostMessage,
+  type FilesDiffFileChange,
+  type FilesDiffPayload,
   type HistoryScope,
   type PaginationState,
   type RemoteBranchInfo,
@@ -28,7 +28,7 @@ import { CommitTable } from "./components/graph/CommitTable";
 import { DateRangeBar } from "./components/graph/DateRangeBar";
 import { PaginationBar } from "./components/graph/Pagination";
 import { TrackingView } from "./components/tracking/TrackingView";
-import { BranchHistoryTab } from "./components/history/BranchHistoryTab";
+import { FilesDiffTab } from "./components/files/FilesDiffTab";
 import { Icon } from "./icons";
 import { notifyThemeChanged } from "./ThemeProvider";
 import { defaultDate } from "./utils";
@@ -57,14 +57,7 @@ const emptyRepo: RepositoryState = {
 interface WebviewPersistedState {
   detailWidth?: number;
   detailShare?: number;
-  historyRangePromoted?: boolean;
 }
-
-const emptyBranchHistoryWindow: BranchHistoryWindow = {
-  totalDays: 7,
-  startDate: "",
-  endDate: ""
-};
 
 function clampDetailShare(value: number): number {
   return Math.max(DETAIL_SHARE_MIN, Math.min(DETAIL_SHARE_MAX, value));
@@ -107,10 +100,8 @@ export function App() {
   const [notice, setNotice] = useState("");
   const [detailShare, setDetailShare] = useState(readDetailShare);
   const [resizingDetail, setResizingDetail] = useState(false);
-  const [branchLifecycles, setBranchLifecycles] = useState<BranchLifecycle[]>([]);
   const [defaultBranch, setDefaultBranch] = useState("main");
-  const [historyDefaultBranch, setHistoryDefaultBranch] = useState("main");
-  const [historyWindow, setHistoryWindow] = useState<BranchHistoryWindow>(emptyBranchHistoryWindow);
+  const [filesDiff, setFilesDiff] = useState<FilesDiffPayload | undefined>();
   const layoutRef = useRef<HTMLDivElement>(null);
   const resizeStart = useRef({ x: 0, share: DETAIL_SHARE_DEFAULT });
   const commitsHydratedFromHost = useRef(false);
@@ -153,16 +144,14 @@ export function App() {
           setRemoteBranches(message.remoteBranches);
           setDefaultBranch(message.defaultBranch);
           break;
-        case "branch-history-data":
-          setBranchLifecycles(message.lifecycles);
-          setHistoryDefaultBranch(message.defaultBranch);
-          setHistoryWindow(message.window);
-          break;
         case "remotes-data":
           setRemotes(message.remotes);
           break;
         case "commit-details-data":
           setCommitFiles((current) => ({ ...current, [message.commitHash]: message.files }));
+          break;
+        case "files-diff-data":
+          setFilesDiff(message.diff);
           break;
         case "loading":
           setLoadingScopes((current) => {
@@ -217,25 +206,6 @@ export function App() {
   }, [tab]);
 
   useEffect(() => {
-    if (tab !== "history") {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      postMessage({ type: "request-branch-history", dateRange });
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [tab, dateRange]);
-
-  function openHistoryTab() {
-    const saved = getVsCodeApi().getState() as WebviewPersistedState | null;
-    if (!saved?.historyRangePromoted && dateRange.mode === "preset" && dateRange.presetDays === 7) {
-      setPreset(30);
-      getVsCodeApi().setState({ ...saved, historyRangePromoted: true });
-    }
-    setTab("history");
-  }
-
-  useEffect(() => {
     if (!selectedHash) {
       return;
     }
@@ -281,7 +251,7 @@ export function App() {
   );
   const selectedFiles = selectedCommit ? commitFiles[selectedCommit.hash] ?? [] : [];
   const filesLoading = loadingScopes.has("commit-details");
-  const historyLoading = loadingScopes.has("branch-history");
+  const filesDiffLoading = loadingScopes.has("files-diff");
   const isLoading = loadingScopes.size > 0;
 
   function setPreset(days: 7 | 14 | 30 | null) {
@@ -318,6 +288,14 @@ export function App() {
       return;
     }
     postMessage({ type: "open-commit-file-diff", commitHash: selectedCommit.hash, file });
+  }
+
+  function compareFiles(leftRef: string, rightRef: string) {
+    postMessage({ type: "request-files-diff", leftRef, rightRef });
+  }
+
+  function openFilesDiffFile(leftRef: string, rightRef: string, file: FilesDiffFileChange) {
+    postMessage({ type: "open-files-diff-file", leftRef, rightRef, file });
   }
 
   const onSplitterPointerDown = useCallback(
@@ -367,7 +345,7 @@ export function App() {
       <div className="tab-bar">
         <TabButton active={tab === "graph"} icon="commit" label="Commit Graph" onClick={() => setTab("graph")} />
         <TabButton active={tab === "branches"} icon="branch" label="Branch Tracking" onClick={() => setTab("branches")} />
-        <TabButton active={tab === "history"} icon="history" label="Branch History" onClick={openHistoryTab} />
+        <TabButton active={tab === "files"} icon="filesDiff" label="Files Diff" onClick={() => setTab("files")} />
       </div>
 
       <main className="main-body">
@@ -447,25 +425,16 @@ export function App() {
             onBranchAction={executeBranch}
           />
         ) : (
-          <BranchHistoryTab
-            lifecycles={branchLifecycles}
-            defaultBranch={historyDefaultBranch}
-            window={historyWindow}
-            dateRange={dateRange}
-            customFrom={customFrom}
-            customTo={customTo}
-            loading={historyLoading}
-            onPreset={setPreset}
-            onCustomFrom={(value) => {
-              setCustomFrom(value);
-              setCustomRange(value, customTo);
-            }}
-            onCustomTo={(value) => {
-              setCustomTo(value);
-              setCustomRange(customFrom, value);
-            }}
-            onShowCustom={() => setCustomRange(customFrom, customTo)}
-            onBranchAction={executeBranch}
+          <FilesDiffTab
+            branches={branches}
+            remoteBranches={remoteBranches}
+            remotes={remotes}
+            currentBranch={repo.currentBranch}
+            defaultBranch={defaultBranch}
+            diff={filesDiff}
+            loading={filesDiffLoading}
+            onCompare={compareFiles}
+            onOpenFile={openFilesDiffFile}
           />
         )}
       </main>

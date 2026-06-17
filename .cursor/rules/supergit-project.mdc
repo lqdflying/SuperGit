@@ -5,21 +5,21 @@ alwaysApply: true
 
 # SuperGit Project
 
-VS Code extension for a Git commit graph, branch tracking, and branch history webview.
+VS Code extension for a Git commit graph, branch tracking, and files diff webview.
 
 ## Source of truth
 
 - Product behavior/UI: **`.cursor/rules/supergit-*.mdc`** (this file + scoped rules below). [`Design/`](../Design/) is optional mockup scratch space only — not runtime source of truth.
 - Commit graph: `supergit-commit-graph.mdc`
 - Webview/CSP/panel: `supergit-webview.mdc`
-- Branch history: `supergit-branch-history.mdc`
+- Files diff: `supergit-files-diff.mdc`
 - Refresh/coalescing/cache: `supergit-refresh-coordination.mdc`
 - Assets: `assets/icon.png` (package/panel icon), `assets/logo.png` (webview logo)
 
 ## Design goals
 
 - Dark VS Code-native webview; dense, operational, tool-like UI (not a landing page)
-- Commit graph tab, branch tracking tab, **branch history tab**, multi-remote visibility, guarded Git actions
+- Commit graph tab, branch tracking tab, **files diff tab**, multi-remote visibility, guarded Git actions
 - Stable dimensions for graph lanes, sidebars, toolbar, rows, status areas
 - Do not replace real UI with explanatory placeholder text
 - Branch tracking actions must be **contextual**: after selection, show ahead/behind/synced/diverged/no-upstream/**remote-only** and enable/highlight only sensible push/pull/upstream actions
@@ -33,10 +33,7 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 | Git CLI | `src/git/runner.ts` |
 | Parsing | `src/git/parser.ts` |
 | Read models | `src/git/commands.ts` |
-| Branch history | `src/git/branch-lifecycle.ts`, `src/git/branch-status.ts` |
 | Refresh policy | `src/extension/refreshPolicy.ts` |
-| History cache | `src/extension/branchHistoryCache.ts` |
-| History gen guard | `src/extension/branchHistoryLoad.ts` |
 | Write actions | `src/git/actions.ts` |
 | Diff provider | `src/git/diffProvider.ts` |
 | Webview React | `src/webview/main.tsx`, `App.tsx`, `components/` |
@@ -49,23 +46,23 @@ VS Code extension for a Git commit graph, branch tracking, and branch history we
 - `superGit.debug: true` enables debug logs in output channel + log file
 - Depends on `vscode.git`; `main` is `./dist/extension.js`
 
-## Git action pitfalls (branch tracking & history)
+## Git action pitfalls (branch tracking)
 
 - `git pull --ff-only origin <branch>` updates the **checked-out** branch, not `<branch>` when another branch is selected
 - Non-checked-out pull: `git fetch <remote> <branch>:<branch>` (fast-forward only; no `+`)
 - Checked-out pull: `git pull --ff-only <remote> <branch>`
 - After successful branch actions in `runBranchAction`, refresh per `src/extension/refreshPolicy.ts` classifiers:
   - `Promise.all([loadBranches(root), loadRemotes(root, { enrichDefaults })])`
-  - History: inline `loadBranchHistory` when tab active, else `markBranchHistoryDirty(root)` only
   - Commits: inline `loadCommits` when Graph tab active, else set `commitGraphDirty` + bump epoch
+  - Files Diff: inline `loadFilesDiff` when Files Diff tab is active and a comparison is selected
 - **`invalidateRemoteDataCaches(root, { defaultBranches? })`** — full invalidation for `fetch`/`prune-stale`/`delete-remote`; list-only (`defaultBranches: false`) for safe actions like `push`/`pull`/`add-upstream`/`set-upstream`/`set-default-upstream`/`checkout-new-local-branch`/`delete`
 - **Checkout New Branch** (`checkout-new-local-branch`) is separate from remote-only **Create Local Branch** (`pull` fetch refspec): checkout creates a *new* local branch and switches worktree; pull fast-forwards/creates the selected ref without checkout. Local pill → `git checkout -b <new> <source>`; explicit remote row or remote-only → `git checkout -b <new> --track <remote>/<branch>` after local `refs/remotes/*` exists. Stale remote row (`remoteRefExists === false`) is not a valid remote source — branch from local pill instead.
 - **Fetch and Set Upstream** when remote branch exists but not fetched: use explicit refspec `refs/heads/<branch>:refs/remotes/<remote>/<branch>` before `git branch --set-upstream-to` (plain `git fetch remote branch` may only update FETCH_HEAD)
 - **Set upstream / Push and Set Upstream:** multi-remote repos use extension-host `showQuickPick` (not manual input); remote branch defaults to local branch name (or explicit `remoteBranchName` from selection)
 - **Multi-remote tracking:** Git allows one **default** upstream per branch. `add-upstream` push/fetch adds `refs/remotes/<remote>/<branch>` **without** `-u` or changing default. `set-default-upstream` runs `git branch --set-upstream-to` for a selected existing tracking ref. `getBranches()` already lists all local remote-tracking refs; configured upstream row shows **`default`** badge in Tracking.
 - **Prune Stale** clears broken upstream via `unsetStaleUpstreamLinks`; never run cleanup if `refs/remotes/` for-each-ref fails
-- Webview must pass explicit `branchName` and `remote` on `execute-branch-action` for Tracking **and Branch History** selection
-- **Remote-only refs** (on remote, no local branch): `getRemoteBranches()` sets `localBranchName` only when a matching `refs/heads/<name>` exists. `BranchSidebar`, `TrackingView`, and **Branch History** must consume `remoteBranches` and show refs where `localBranchName` is unset — not only local rows from `getBranches()`.
+- Webview must pass explicit `branchName` and `remote` on `execute-branch-action` for Tracking selection
+- **Remote-only refs** (on remote, no local branch): `getRemoteBranches()` sets `localBranchName` only when a matching `refs/heads/<name>` exists. `BranchSidebar`, `TrackingView`, and Files Diff must consume `remoteBranches` and show refs where `localBranchName` is unset — not only local rows from `getBranches()`.
 
 ## Agent policy
 

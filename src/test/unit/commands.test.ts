@@ -10,7 +10,7 @@ vi.mock("../../git/api", () => ({
   getActiveRepository: vi.fn().mockResolvedValue({ root: "/repo", name: "repo", currentBranch: "main" })
 }));
 
-import { clearRemotesCache, getAheadBehind, getBranches, getCommitFileChanges, getCommits, getCurrentBranch, getRemoteBranches, getRemotes, getRepositoryState, unsetStaleUpstreamLinks } from "../../git/commands";
+import { clearRemotesCache, getAheadBehind, getBranches, getCommitFileChanges, getCommits, getCurrentBranch, getFilesDiff, getRemoteBranches, getRemotes, getRepositoryState, unsetStaleUpstreamLinks } from "../../git/commands";
 import { getActiveRepository } from "../../git/api";
 import { runGit } from "../../git/runner";
 
@@ -245,6 +245,39 @@ describe("getCommitFileChanges", () => {
     expect(result.baseHash).toBeUndefined();
     expect(result.files[0]).toMatchObject({ path: "README.md", status: "added" });
     expect(mockedRunGit).toHaveBeenCalledWith(["diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", "root123"], "/repo");
+  });
+});
+
+describe("getFilesDiff", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("loads direct branch-tip file diffs with totals", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "diff" && args.includes("--name-status")) {
+        return ok("M\tsrc/app.ts\nA\tsrc/new.ts\nR100\tsrc/old.ts\tsrc/renamed.ts\n");
+      }
+      if (args[0] === "diff" && args.includes("--numstat")) {
+        return ok("2\t1\tsrc/app.ts\n5\t0\tsrc/new.ts\n1\t1\tsrc/{old.ts => renamed.ts}\n");
+      }
+      return ok("");
+    });
+
+    const result = await getFilesDiff("/repo", "feature/x", "foo/bar/main");
+    expect(result.summary).toMatchObject({ files: 3, additions: 8, deletions: 2 });
+    expect(result.files[2]).toMatchObject({ oldPath: "src/old.ts", path: "src/renamed.ts", status: "renamed" });
+    expect(mockedRunGit).toHaveBeenCalledWith(["diff", "--name-status", "-M", "feature/x", "foo/bar/main"], "/repo");
+    expect(mockedRunGit).toHaveBeenCalledWith(["diff", "--numstat", "-M", "feature/x", "foo/bar/main"], "/repo");
+  });
+
+  it("returns an empty diff for identical refs without running git", async () => {
+    const result = await getFilesDiff("/repo", "main", "main");
+    expect(result.summary.files).toBe(0);
+    expect(mockedRunGit).not.toHaveBeenCalled();
+  });
+
+  it("throws when git diff fails", async () => {
+    mockedRunGit.mockResolvedValue(fail("fatal: bad revision"));
+    await expect(getFilesDiff("/repo", "main", "missing/ref")).rejects.toThrow("git files diff failed");
   });
 });
 

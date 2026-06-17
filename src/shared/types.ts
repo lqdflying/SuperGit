@@ -102,6 +102,51 @@ export interface CommitFileChange {
   rawStatus: string;
 }
 
+export type FilesDiffRefKind = "local" | "remote";
+
+export interface FilesDiffRef {
+  kind: FilesDiffRefKind;
+  ref: string;
+  label: string;
+  branchName: string;
+  remote?: string;
+  colorIndex: number;
+  isCurrent?: boolean;
+  isDefault?: boolean;
+}
+
+export interface FilesDiffFileChange extends CommitFileChange {
+  additions: number | null;
+  deletions: number | null;
+  binary: boolean;
+}
+
+export interface FilesDiffStatusTotals {
+  added: number;
+  modified: number;
+  deleted: number;
+  renamed: number;
+  copied: number;
+  typechange: number;
+  unmerged: number;
+  unknown: number;
+}
+
+export interface FilesDiffSummary {
+  files: number;
+  additions: number;
+  deletions: number;
+  binaryFiles: number;
+  statuses: FilesDiffStatusTotals;
+}
+
+export interface FilesDiffPayload {
+  leftRef: string;
+  rightRef: string;
+  files: FilesDiffFileChange[];
+  summary: FilesDiffSummary;
+}
+
 export type CommitAction =
   | "checkout"
   | "cherry-pick"
@@ -122,78 +167,7 @@ export type BranchAction =
   | "delete-remote"
   | "prune-stale";
 
-export type BranchLifecycleStatus = "active" | "diverged" | "merged" | "remote-only";
-
-export type BranchDivergenceSeverity = "mild" | "high" | "severe";
-
-export interface BranchLifecycle {
-  name: string;
-  colorIndex: number;
-  isCurrent: boolean;
-  remoteOnly?: boolean;
-  remote?: string;
-  status: BranchLifecycleStatus;
-  severity?: BranchDivergenceSeverity;
-  stale: boolean;
-  startDay: number;
-  endDay: number;
-  commitDays: number[];
-  totalCommits: number;
-  startDate: string;
-  endDate: string;
-  commitDates: string[];
-  hashStart: string;
-  hashEnd: string;
-  hashLca?: string;
-  forkedFrom: { branch: string; day: number; date: string } | null;
-  mergedInto: { branch: string; day: number; date: string } | null;
-  aheadOfMain: number;
-  behindMain: number;
-  lastCommonAncestorDay: number;
-  lastCommonAncestorDate?: string;
-  remotes: RemotePosition[];
-  divergePerRemote?: PerRemoteDivergence[];
-  description: string;
-}
-
-export interface RemotePosition {
-  name: string;
-  colorIndex: number;
-  pushDay: number;
-  pushDate: string;
-  hash: string;
-  behindLocal: number;
-}
-
-export interface PerRemoteDivergence {
-  remote: string;
-  behind: number;
-  mainRef: string;
-}
-
-export interface RemoteMainPosition {
-  name: string;
-  colorIndex: number;
-  lastDay: number;
-  lastDate: string;
-  hash: string;
-  commits: number[];
-}
-
-export interface BranchHistoryPayload {
-  lifecycles: BranchLifecycle[];
-  defaultBranch: string;
-  remoteMains: RemoteMainPosition[];
-  window: BranchHistoryWindow;
-}
-
-export interface BranchHistoryWindow {
-  totalDays: number;
-  startDate: string;
-  endDate: string;
-}
-
-export type WebviewTab = "graph" | "branches" | "history";
+export type WebviewTab = "graph" | "branches" | "files";
 
 export type WebviewMessage =
   | { type: "ready" }
@@ -202,9 +176,10 @@ export type WebviewMessage =
   | { type: "request-commits"; dateRange: DateRange; page: number; searchText: string; scope: HistoryScope }
   | { type: "request-branches" }
   | { type: "request-remotes" }
-  | { type: "request-branch-history"; dateRange: DateRange }
   | { type: "request-commit-details"; commitHash: string }
+  | { type: "request-files-diff"; leftRef: string; rightRef: string }
   | { type: "open-commit-file-diff"; commitHash: string; file: CommitFileChange }
+  | { type: "open-files-diff-file"; leftRef: string; rightRef: string; file: FilesDiffFileChange }
   | { type: "refresh" }
   | { type: "tab-changed"; tab: WebviewTab }
   | { type: "execute-action"; action: CommitAction; commitHash: string }
@@ -215,9 +190,9 @@ export type ExtHostMessage =
   | { type: "commits-data"; commits: CommitNode[]; pagination: PaginationState }
   | { type: "branches-data"; branches: BranchInfo[]; remoteBranches: RemoteBranchInfo[]; defaultBranch: string }
   | { type: "remotes-data"; remotes: RemoteConfig[] }
-  | { type: "branch-history-data"; lifecycles: BranchLifecycle[]; defaultBranch: string; remoteMains: RemoteMainPosition[]; window: BranchHistoryWindow }
   | { type: "commit-details-data"; commitHash: string; baseHash?: string; files: CommitFileChange[] }
-  | { type: "loading"; loading: boolean; scope?: "all" | "commits" | "branches" | "remotes" | "branch-history" | "commit-details" | "action" }
+  | { type: "files-diff-data"; diff: FilesDiffPayload }
+  | { type: "loading"; loading: boolean; scope?: "all" | "commits" | "branches" | "remotes" | "files-diff" | "commit-details" | "action" }
   | { type: "error"; message: string }
   | { type: "action-result"; success: boolean; message: string }
   | { type: "repo-changed" }

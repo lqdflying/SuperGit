@@ -29,12 +29,5 @@ export interface ThemeColors {
   currentBadge: string;
   currentBadgeBg: string;
   buttonFg: string;
-  historyGrid: string;
-  historyGridWeek: string;
-  historyMerged: string;
-  historyStale: string;
-  historyWarn: string;
-  historyDanger: string;
-  historyOk: string;
   defaultBranch: string;
 }

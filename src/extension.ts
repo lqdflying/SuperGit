@@ -1,6 +1,5 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { getBranchLifecycles, resolveDefaultBranch } from "./git/branch-lifecycle";
 import { executeBranchAction, executeCommitAction } from "./git/actions";
 import { getActiveRepository, onRepositoryChange } from "./git/api";
 import {
@@ -8,21 +7,19 @@ import {
   getCommitBaseHash,
   getCommitFileChanges,
   getCommits,
+  getFilesDiff,
   getRemoteBranches,
   getRemotes,
   getRepositoryState,
-  invalidateRemoteDataCaches
+  invalidateRemoteDataCaches,
+  resolveDefaultBranch
 } from "./git/commands";
 import { enrichRemotesWithDefaultBranches } from "./git/remote-default";
 import { runGit } from "./git/runner";
 import { createSuperGitContentUri, SUPERGIT_DIFF_SCHEME, SuperGitDiffContentProvider } from "./git/diffProvider";
-import { beginBranchHistoryLoad, isCurrentBranchHistoryLoad } from "./extension/branchHistoryLoad";
-import { getBranchHistoryCache, getBranchHistoryCacheEpoch, isBranchHistoryCacheEpochCurrent, markBranchHistoryDirty, setBranchHistoryCache } from "./extension/branchHistoryCache";
 import {
   shouldEnrichRemoteDefaultsAfterAction,
   shouldInvalidateRemoteDefaultBranches,
-  shouldMarkBranchHistoryDirty,
-  shouldReloadBranchHistoryAfterAction,
   shouldReloadCommitsAfterAction
 } from "./extension/refreshPolicy";
 import { debug, error as logError, info, initializeLogger, isDebugEnabled, showLogs, warn } from "./logger";
@@ -35,6 +32,8 @@ import {
   type CommitAction,
   type DateRange,
   type ExtHostMessage,
+  type FilesDiffFileChange,
+  type FilesDiffPayload,
   type HistoryScope,
   type RemoteConfig,
   type WebviewMessage,
@@ -61,9 +60,7 @@ const lastCommitRequest: { dateRange: DateRange; page: number; searchText: strin
   scope: DEFAULT_HISTORY_SCOPE
 };
 
-const lastBranchHistoryRequest: { dateRange: DateRange } = {
-  dateRange: DEFAULT_DATE_RANGE
-};
+const lastFilesDiffRequest: { leftRef?: string; rightRef?: string } = {};
 
 let activeWebviewTab: WebviewTab = "graph";
 let commitGraphDirty = false;
@@ -282,15 +279,19 @@ async function handleWebviewMessage(message: WebviewMessage): Promise<void> {
     case "request-remotes":
       await loadRemotes();
       return;
-    case "request-branch-history":
-      lastBranchHistoryRequest.dateRange = message.dateRange;
-      await loadBranchHistory(message.dateRange);
-      return;
     case "request-commit-details":
       await loadCommitDetails(message.commitHash);
       return;
+    case "request-files-diff":
+      lastFilesDiffRequest.leftRef = message.leftRef;
+      lastFilesDiffRequest.rightRef = message.rightRef;
+      await loadFilesDiff(message.leftRef, message.rightRef);
+      return;
     case "open-commit-file-diff":
       await openCommitFileDiff(message.commitHash, message.file);
+      return;
+    case "open-files-diff-file":
+      await openFilesDiffFile(message.leftRef, message.rightRef, message.file);
       return;
     case "refresh":
       await refreshFromRemote();
@@ -379,15 +380,13 @@ async function loadInitialDataInner(): Promise<void> {
       return;
     }
 
-    markBranchHistoryDirty(root);
     await Promise.all([
       loadCommits(lastCommitRequest.dateRange, lastCommitRequest.page, lastCommitRequest.searchText, lastCommitRequest.scope, root),
       loadBranches(root),
       loadRemotes(root)
     ]);
-    if (activeWebviewTab === "history") {
-      debug("branch history reload after full data refresh; history tab active");
-      await loadBranchHistory(lastBranchHistoryRequest.dateRange, root);
+    if (activeWebviewTab === "files" && lastFilesDiffRequest.leftRef && lastFilesDiffRequest.rightRef) {
+      await loadFilesDiff(lastFilesDiffRequest.leftRef, lastFilesDiffRequest.rightRef, root);
     }
   } catch (error) {
     postError(error);
@@ -465,6 +464,32 @@ async function loadCommitDetails(commitHash: string, knownRoot?: string): Promis
   }
 }
 
+async function loadFilesDiff(leftRef: string, rightRef: string, knownRoot?: string): Promise<void> {
+  debug("loadFilesDiff start", { leftRef, rightRef, knownRoot });
+  post({ type: "loading", loading: true, scope: "files-diff" });
+  try {
+    const root = knownRoot ?? (await resolveRepositoryRoot());
+    if (!root) {
+      post({ type: "files-diff-data", diff: emptyFilesDiff(leftRef, rightRef) });
+      return;
+    }
+
+    const diff = await getFilesDiff(root, leftRef, rightRef);
+    post({ type: "files-diff-data", diff });
+    info("files diff loaded", {
+      leftRef,
+      rightRef,
+      fileCount: diff.summary.files,
+      additions: diff.summary.additions,
+      deletions: diff.summary.deletions
+    });
+  } catch (error) {
+    postError(error);
+  } finally {
+    post({ type: "loading", loading: false, scope: "files-diff" });
+  }
+}
+
 async function loadRemotes(knownRoot?: string, options?: LoadRemotesOptions): Promise<void> {
   const enrichDefaults = options?.enrichDefaults !== false;
   debug("loadRemotes start", { knownRoot, enrichDefaults });
@@ -527,96 +552,6 @@ async function enrichRemoteDefaultsInner(root: string, remotes: RemoteConfig[], 
   }
 }
 
-async function loadBranchHistory(dateRange: DateRange, knownRoot?: string): Promise<void> {
-  const generation = beginBranchHistoryLoad();
-  debug("loadBranchHistory start", { dateRange, knownRoot, generation });
-  post({ type: "loading", loading: true, scope: "branch-history" });
-  try {
-    const root = knownRoot ?? (await resolveRepositoryRoot());
-    if (!isCurrentBranchHistoryLoad(generation)) {
-      debug("loadBranchHistory result skipped; superseded", { generation });
-      return;
-    }
-    if (!root) {
-      if (activeWebviewTab === "history" && isCurrentBranchHistoryLoad(generation)) {
-        post({
-          type: "branch-history-data",
-          lifecycles: [],
-          defaultBranch: "main",
-          remoteMains: [],
-          window: { totalDays: 7, startDate: "", endDate: "" }
-        });
-      }
-      return;
-    }
-
-    const cached = getBranchHistoryCache(root, dateRange);
-    if (cached) {
-      debug("branch history cache hit", { generation, dateRange });
-      if (activeWebviewTab === "history" && isCurrentBranchHistoryLoad(generation)) {
-        post({
-          type: "branch-history-data",
-          lifecycles: cached.lifecycles,
-          defaultBranch: cached.defaultBranch,
-          remoteMains: cached.remoteMains,
-          window: cached.window
-        });
-        info("branch history loaded", {
-          count: cached.lifecycles.length,
-          defaultBranch: cached.defaultBranch,
-          remoteMainCount: cached.remoteMains.length,
-          generation,
-          cached: true
-        });
-      } else {
-        debug("branch history post skipped; tab inactive", { generation, tab: activeWebviewTab });
-      }
-      return;
-    }
-
-    const cacheEpoch = getBranchHistoryCacheEpoch(root);
-    const payload = await getBranchLifecycles(root, dateRange);
-    if (!isCurrentBranchHistoryLoad(generation)) {
-      debug("loadBranchHistory result skipped; superseded", { generation });
-      return;
-    }
-
-    if (!isBranchHistoryCacheEpochCurrent(root, cacheEpoch)) {
-      debug("branch history result discarded; cache epoch changed", { generation, cacheEpoch, currentEpoch: getBranchHistoryCacheEpoch(root) });
-      return;
-    }
-
-    setBranchHistoryCache(root, dateRange, payload);
-
-    if (activeWebviewTab !== "history") {
-      debug("branch history post skipped; tab inactive", { generation, tab: activeWebviewTab });
-      return;
-    }
-
-    post({
-      type: "branch-history-data",
-      lifecycles: payload.lifecycles,
-      defaultBranch: payload.defaultBranch,
-      remoteMains: payload.remoteMains,
-      window: payload.window
-    });
-    info("branch history loaded", {
-      count: payload.lifecycles.length,
-      defaultBranch: payload.defaultBranch,
-      remoteMainCount: payload.remoteMains.length,
-      generation
-    });
-  } catch (error) {
-    if (isCurrentBranchHistoryLoad(generation)) {
-      postError(error);
-    }
-  } finally {
-    if (isCurrentBranchHistoryLoad(generation)) {
-      post({ type: "loading", loading: false, scope: "branch-history" });
-    }
-  }
-}
-
 async function runCommitAction(action: CommitAction, commitHash: string): Promise<void> {
   info("commit action requested", { action, commitHash: commitHash.slice(0, 12) });
   const root = await resolveRepositoryRoot();
@@ -672,16 +607,6 @@ async function runBranchAction(
         loadBranches(root),
         loadRemotes(root, { enrichDefaults: shouldEnrichRemoteDefaultsAfterAction(action) })
       ]);
-      const currentTab = activeWebviewTab;
-      if (shouldReloadBranchHistoryAfterAction(actionTab, currentTab)) {
-        markBranchHistoryDirty(root);
-        await loadBranchHistory(lastBranchHistoryRequest.dateRange, root);
-      } else if (shouldMarkBranchHistoryDirty(action)) {
-        markBranchHistoryDirty(root);
-        debug("branch history marked dirty", { actionTab, currentTab, action });
-      } else {
-        debug("loadBranchHistory skipped; history tab inactive", { actionTab, currentTab, action });
-      }
       if (shouldReloadCommitsAfterAction(action)) {
         if (activeWebviewTab === "graph") {
           commitGraphDirty = false;
@@ -697,6 +622,9 @@ async function runBranchAction(
           commitGraphDirtyEpoch += 1;
           debug("loadCommits deferred; graph tab inactive", { actionTab, currentTab: activeWebviewTab, action });
         }
+      }
+      if (activeWebviewTab === "files" && lastFilesDiffRequest.leftRef && lastFilesDiffRequest.rightRef) {
+        await loadFilesDiff(lastFilesDiffRequest.leftRef, lastFilesDiffRequest.rightRef, root);
       }
     }
   } catch (error) {
@@ -739,6 +667,38 @@ async function openCommitFileDiff(commitHash: string, file: CommitFileChange): P
   }
 }
 
+async function openFilesDiffFile(leftRef: string, rightRef: string, file: FilesDiffFileChange): Promise<void> {
+  info("files diff file requested", {
+    leftRef,
+    rightRef,
+    path: file.path,
+    oldPath: file.oldPath,
+    status: file.status
+  });
+  const root = await resolveRepositoryRoot();
+  if (!root) {
+    post({ type: "action-result", success: false, message: "No Git repository is open." });
+    return;
+  }
+
+  try {
+    const leftPath = file.oldPath ?? file.path;
+    const left = file.status === "added"
+      ? createSuperGitContentUri({ root, filePath: leftPath, empty: true, label: `${leftPath} (empty)` })
+      : createSuperGitContentUri({ root, ref: leftRef, filePath: leftPath, label: `${leftPath} (${leftRef})` });
+    const right = file.status === "deleted"
+      ? createSuperGitContentUri({ root, filePath: file.path, empty: true, label: `${file.path} (deleted)` })
+      : createSuperGitContentUri({ root, ref: rightRef, filePath: file.path, label: `${file.path} (${rightRef})` });
+    await vscode.commands.executeCommand("vscode.diff", left, right, `${file.path} (${leftRef} vs ${rightRef})`, {
+      preview: false,
+      preserveFocus: true,
+      viewColumn: vscode.ViewColumn.Beside
+    });
+  } catch (error) {
+    postError(error);
+  }
+}
+
 async function resolveRepositoryRoot(): Promise<string | undefined> {
   const activeRepository = await getActiveRepository();
   debug("active repository lookup", activeRepository);
@@ -755,6 +715,30 @@ function postError(error: unknown): void {
   logError("SuperGit error", error);
   post({ type: "error", message });
   void vscode.window.showErrorMessage(message);
+}
+
+function emptyFilesDiff(leftRef: string, rightRef: string): FilesDiffPayload {
+  return {
+    leftRef,
+    rightRef,
+    files: [],
+    summary: {
+      files: 0,
+      additions: 0,
+      deletions: 0,
+      binaryFiles: 0,
+      statuses: {
+        added: 0,
+        modified: 0,
+        deleted: 0,
+        renamed: 0,
+        copied: 0,
+        typechange: 0,
+        unmerged: 0,
+        unknown: 0
+      }
+    }
+  };
 }
 
 function showActionNotification(result: { success: boolean; message: string }): void {
@@ -871,14 +855,17 @@ function summarizeWebviewMessage(message: WebviewMessage) {
       scope: message.scope
     };
   }
-  if (message.type === "request-branch-history") {
-    return { type: message.type, dateRange: message.dateRange };
-  }
   if (message.type === "request-commit-details") {
     return { type: message.type, commitHash: message.commitHash.slice(0, 12) };
   }
+  if (message.type === "request-files-diff") {
+    return { type: message.type, leftRef: message.leftRef, rightRef: message.rightRef };
+  }
   if (message.type === "open-commit-file-diff") {
     return { type: message.type, commitHash: message.commitHash.slice(0, 12), path: message.file.path };
+  }
+  if (message.type === "open-files-diff-file") {
+    return { type: message.type, leftRef: message.leftRef, rightRef: message.rightRef, path: message.file.path };
   }
   if (message.type === "execute-action") {
     return {
@@ -917,15 +904,10 @@ function summarizeExtHostMessage(message: ExtHostMessage) {
       return { type: message.type, count: message.branches.length, remoteBranchCount: message.remoteBranches.length };
     case "commit-details-data":
       return { type: message.type, commitHash: message.commitHash.slice(0, 12), fileCount: message.files.length };
+    case "files-diff-data":
+      return { type: message.type, leftRef: message.diff.leftRef, rightRef: message.diff.rightRef, fileCount: message.diff.summary.files };
     case "remotes-data":
       return { type: message.type, count: message.remotes.length };
-    case "branch-history-data":
-      return {
-        type: message.type,
-        count: message.lifecycles.length,
-        defaultBranch: message.defaultBranch,
-        remoteMainCount: message.remoteMains.length
-      };
     case "repo-state":
       return { type: message.type, repo: message.repo };
     default:

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIELD_SEP, RECORD_SEP, findRemoteForRef, isRemoteHeadRef, parseCommits, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes, parseUpstreamRef } from "../../git/parser";
+import { FIELD_SEP, RECORD_SEP, findRemoteForRef, isRemoteHeadRef, parseCommits, parseFilesDiff, parseLocalBranchRows, parseNameStatus, parseRemoteRefs, parseRemotes, parseUpstreamRef } from "../../git/parser";
 
 const commitRecord = (parts: string[]) => `${parts.join(FIELD_SEP)}${RECORD_SEP}`;
 
@@ -224,6 +224,41 @@ describe("parseNameStatus", () => {
       { path: "src/old.ts", status: "deleted", rawStatus: "D" },
       { oldPath: "src/old-name.ts", path: "src/new-name.ts", status: "renamed", rawStatus: "R100" }
     ]);
+  });
+});
+
+describe("parseFilesDiff", () => {
+  it("pairs file status rows with numstat totals", () => {
+    const result = parseFilesDiff(
+      "M\tsrc/app.ts\nA\tsrc/new.ts\nD\tsrc/old.ts\nR100\tsrc/old-name.ts\tsrc/new-name.ts\n",
+      "2\t1\tsrc/app.ts\n5\t0\tsrc/new.ts\n0\t4\tsrc/old.ts\n3\t3\tsrc/{old-name.ts => new-name.ts}\n"
+    );
+
+    expect(result.files).toEqual([
+      { path: "src/app.ts", status: "modified", rawStatus: "M", additions: 2, deletions: 1, binary: false },
+      { path: "src/new.ts", status: "added", rawStatus: "A", additions: 5, deletions: 0, binary: false },
+      { path: "src/old.ts", status: "deleted", rawStatus: "D", additions: 0, deletions: 4, binary: false },
+      { oldPath: "src/old-name.ts", path: "src/new-name.ts", status: "renamed", rawStatus: "R100", additions: 3, deletions: 3, binary: false }
+    ]);
+    expect(result.summary).toMatchObject({
+      files: 4,
+      additions: 10,
+      deletions: 8,
+      binaryFiles: 0,
+      statuses: { added: 1, modified: 1, deleted: 1, renamed: 1 }
+    });
+  });
+
+  it("handles copied, typechange, unmerged, unknown, binary, and empty outputs", () => {
+    const result = parseFilesDiff("C75\ta\tb\nT\tbin/tool\nU\tconflict.ts\nX\tweird\n", "1\t2\tb\n-\t-\tbin/tool\n0\t0\tconflict.ts\n0\t1\tweird\n");
+
+    expect(result.files[1]).toMatchObject({ path: "bin/tool", status: "typechange", additions: null, deletions: null, binary: true });
+    expect(result.summary.binaryFiles).toBe(1);
+    expect(result.summary.statuses.copied).toBe(1);
+    expect(result.summary.statuses.typechange).toBe(1);
+    expect(result.summary.statuses.unmerged).toBe(1);
+    expect(result.summary.statuses.unknown).toBe(1);
+    expect(parseFilesDiff("", "").summary.files).toBe(0);
   });
 });
 

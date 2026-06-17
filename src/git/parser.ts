@@ -1,4 +1,4 @@
-import type { CommitFileChange, CommitFileStatus, CommitNode, RemoteConfig } from "../shared/types";
+import type { CommitFileChange, CommitFileStatus, CommitNode, FilesDiffFileChange, FilesDiffStatusTotals, RemoteConfig } from "../shared/types";
 import { colors } from "../shared/tokens";
 import { assignSwimlanes } from "./swimlanes";
 
@@ -185,6 +185,79 @@ export function parseNameStatus(raw: string): CommitFileChange[] {
       };
     })
     .filter((file) => Boolean(file.path));
+}
+
+export function parseFilesDiff(nameStatusRaw: string, numstatRaw: string): { files: FilesDiffFileChange[]; summary: { files: number; additions: number; deletions: number; binaryFiles: number; statuses: FilesDiffStatusTotals } } {
+  const statusRows = parseNameStatus(nameStatusRaw);
+  const numstatRows = parseNumstat(numstatRaw);
+  const statuses = emptyStatusTotals();
+  let additions = 0;
+  let deletions = 0;
+  let binaryFiles = 0;
+
+  const files = statusRows.map((file, index): FilesDiffFileChange => {
+    const stats = numstatRows[index] ?? { additions: null, deletions: null, binary: false };
+    statuses[file.status] += 1;
+    if (stats.binary) {
+      binaryFiles += 1;
+    }
+    if (typeof stats.additions === "number") {
+      additions += stats.additions;
+    }
+    if (typeof stats.deletions === "number") {
+      deletions += stats.deletions;
+    }
+
+    return {
+      ...file,
+      additions: stats.additions,
+      deletions: stats.deletions,
+      binary: stats.binary
+    };
+  });
+
+  return {
+    files,
+    summary: {
+      files: files.length,
+      additions,
+      deletions,
+      binaryFiles,
+      statuses
+    }
+  };
+}
+
+function parseNumstat(raw: string): Array<{ additions: number | null; deletions: number | null; binary: boolean }> {
+  return raw
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [added = "-", deleted = "-"] = line.split("\t");
+      const additions = Number.parseInt(added, 10);
+      const deletions = Number.parseInt(deleted, 10);
+      const binary = added === "-" || deleted === "-";
+      return {
+        additions: Number.isFinite(additions) ? additions : null,
+        deletions: Number.isFinite(deletions) ? deletions : null,
+        binary
+      };
+    });
+}
+
+function emptyStatusTotals(): FilesDiffStatusTotals {
+  return {
+    added: 0,
+    modified: 0,
+    deleted: 0,
+    renamed: 0,
+    copied: 0,
+    typechange: 0,
+    unmerged: 0,
+    unknown: 0
+  };
 }
 
 function parseRefs(raw: string, remoteNames: string[]): { refs: string[]; tags: string[] } {
