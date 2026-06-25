@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.1 - 2026-06-25
+
+### Fixed
+
+- Deleting a remote branch now immediately clears every local upstream configured for that exact remote ref, so the Branch Tracking relationship arrow disappears after the normal post-action reload.
+- Remote deletion remains successful if local upstream cleanup cannot complete and directs the user to **Prune Stale** for recovery.
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (175 tests)
+- `npm run build`
+- `npm run package`
+
 ## 2.0.0 - 2026-06-17
 
 ### Breaking

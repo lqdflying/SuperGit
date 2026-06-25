@@ -69,12 +69,50 @@ export interface InvalidateRemoteDataCachesOptions {
   defaultBranches?: boolean;
 }
 
+export interface UpstreamCleanupResult {
+  unsetBranches: string[];
+  complete: boolean;
+}
+
 /** Invalidate remotes list cache and optionally per-remote default-branch cache after fetch/prune or ref changes. */
 export function invalidateRemoteDataCaches(cwd?: string, options?: InvalidateRemoteDataCachesOptions): void {
   clearRemotesCache(cwd);
   if (options?.defaultBranches !== false) {
     clearRemoteDefaultBranchCache(cwd);
   }
+}
+
+/** Clear upstream on every local branch configured to track one exact remote branch. */
+export async function unsetUpstreamLinksForRemoteRef(
+  cwd: string,
+  remote: string,
+  remoteBranch: string
+): Promise<UpstreamCleanupResult> {
+  const branchResult = await runGit(
+    ["for-each-ref", "--format=%(refname:short)%09%(upstream:short)%09%(upstream:remotename)", "refs/heads/"],
+    cwd
+  );
+  if (branchResult.exitCode !== 0) {
+    return { unsetBranches: [], complete: false };
+  }
+
+  const targetRef = `${remote}/${remoteBranch}`;
+  const matchingBranches = parseLocalBranchRows(branchResult.stdout).filter(
+    (branch) => branch.upstreamRemote === remote && branch.upstreamRef === targetRef
+  );
+  const unsetBranches: string[] = [];
+  let complete = true;
+
+  for (const branch of matchingBranches) {
+    const result = await runGit(["branch", "--unset-upstream", branch.name], cwd, { timeout: 120_000 });
+    if (result.exitCode === 0) {
+      unsetBranches.push(branch.name);
+    } else {
+      complete = false;
+    }
+  }
+
+  return { unsetBranches, complete };
 }
 
 /** Clear upstream on local branches whose remote-tracking ref is missing (often after fetch --prune). */

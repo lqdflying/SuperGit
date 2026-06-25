@@ -8,6 +8,7 @@ const runGitMock = vi.hoisted(() => vi.fn());
 const getCurrentBranchMock = vi.hoisted(() => vi.fn());
 const getRemotesMock = vi.hoisted(() => vi.fn());
 const unsetStaleUpstreamLinksMock = vi.hoisted(() => vi.fn());
+const unsetUpstreamLinksForRemoteRefMock = vi.hoisted(() => vi.fn());
 const resolveDefaultBranchMock = vi.hoisted(() => vi.fn());
 const resolveRemoteDefaultBranchMock = vi.hoisted(() => vi.fn());
 const isBranchMergedIntoMock = vi.hoisted(() => vi.fn());
@@ -40,7 +41,8 @@ vi.mock("../../git/commands", () => ({
   getRemotes: getRemotesMock,
   resolveDefaultBranch: resolveDefaultBranchMock,
   isBranchMergedInto: isBranchMergedIntoMock,
-  unsetStaleUpstreamLinks: unsetStaleUpstreamLinksMock
+  unsetStaleUpstreamLinks: unsetStaleUpstreamLinksMock,
+  unsetUpstreamLinksForRemoteRef: unsetUpstreamLinksForRemoteRefMock
 }));
 
 vi.mock("../../git/remote-default", () => ({
@@ -118,6 +120,7 @@ describe("executeBranchAction", () => {
     resolveRemoteDefaultBranchMock.mockResolvedValue("main");
     isBranchMergedIntoMock.mockResolvedValue(true);
     unsetStaleUpstreamLinksMock.mockResolvedValue([]);
+    unsetUpstreamLinksForRemoteRefMock.mockResolvedValue({ unsetBranches: [], complete: true });
     runGitMock.mockResolvedValue(ok(""));
   });
 
@@ -627,6 +630,23 @@ describe("executeBranchAction", () => {
       success: false,
       message: "Cannot delete origin/develop: it is the default branch on origin. Change the remote default branch first."
     });
+    expect(unsetUpstreamLinksForRemoteRefMock).not.toHaveBeenCalled();
+  });
+
+  it("does not clean up upstreams when remote deletion is cancelled", async () => {
+    showWarningMessageMock.mockResolvedValue(undefined);
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return ok("abc123\n");
+      }
+      return ok("");
+    });
+
+    await expect(
+      executeBranchAction("/repo", "delete-remote", "feature/a", "origin", undefined, { defaultBranch: "main" })
+    ).resolves.toEqual({ success: false, message: "Action cancelled." });
+    expect(runGitMock).not.toHaveBeenCalledWith(["push", "origin", "--delete", "feature/a"], "/repo", { timeout: 120_000 });
+    expect(unsetUpstreamLinksForRemoteRefMock).not.toHaveBeenCalled();
   });
 
   it("deletes remote branches after confirmation", async () => {
@@ -641,6 +661,46 @@ describe("executeBranchAction", () => {
     expect(runGitMock).not.toHaveBeenCalledWith(["ls-remote", "--heads", "origin", "feature/a"], "/repo", { timeout: 120_000 });
     expect(isBranchMergedIntoMock).toHaveBeenCalledWith("/repo", "refs/remotes/origin/feature/a", "main");
     expect(runGitMock).toHaveBeenCalledWith(["push", "origin", "--delete", "feature/a"], "/repo", { timeout: 120_000 });
+    expect(unsetUpstreamLinksForRemoteRefMock).toHaveBeenCalledWith("/repo", "origin", "feature/a");
+  });
+
+  it("reports local upstream cleanup after deleting a remote branch", async () => {
+    showWarningMessageMock.mockResolvedValue("Delete Remote");
+    unsetUpstreamLinksForRemoteRefMock.mockResolvedValue({
+      unsetBranches: ["feature/a", "feature/a-copy"],
+      complete: true
+    });
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return ok("abc123\n");
+      }
+      return ok("");
+    });
+
+    await expect(
+      executeBranchAction("/repo", "delete-remote", "feature/a", "origin", undefined, { defaultBranch: "main" })
+    ).resolves.toEqual({
+      success: true,
+      message: "Deleted remote branch origin/feature/a. Cleared upstream on feature/a, feature/a-copy."
+    });
+  });
+
+  it("keeps remote deletion successful when upstream cleanup is incomplete", async () => {
+    showWarningMessageMock.mockResolvedValue("Delete Remote");
+    unsetUpstreamLinksForRemoteRefMock.mockResolvedValue({ unsetBranches: [], complete: false });
+    runGitMock.mockImplementation(async (args) => {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return ok("abc123\n");
+      }
+      return ok("");
+    });
+
+    await expect(
+      executeBranchAction("/repo", "delete-remote", "feature/a", "origin", undefined, { defaultBranch: "main" })
+    ).resolves.toEqual({
+      success: true,
+      message: "Deleted remote branch origin/feature/a. Some local upstream links could not be cleared. Run Prune Stale."
+    });
   });
 
   it("blocks remote delete when the branch does not exist on the remote", async () => {

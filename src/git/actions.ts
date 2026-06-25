@@ -1,7 +1,14 @@
 import * as vscode from "vscode";
 import type { BranchAction, CommitAction, RemoteConfig } from "../shared/types";
 import { resolveRemoteDefaultBranch } from "./remote-default";
-import { getCurrentBranch, getRemotes, isBranchMergedInto, resolveDefaultBranch, unsetStaleUpstreamLinks } from "./commands";
+import {
+  getCurrentBranch,
+  getRemotes,
+  isBranchMergedInto,
+  resolveDefaultBranch,
+  unsetStaleUpstreamLinks,
+  unsetUpstreamLinksForRemoteRef
+} from "./commands";
 import { runGit } from "./runner";
 
 export interface ActionResult {
@@ -646,7 +653,15 @@ async function executeDeleteRemoteCommand(cwd: string, remote: string, remoteBra
     return { success: false, message: detail };
   }
 
-  return { success: true, message: `Deleted remote branch ${remote}/${remoteBranch}.` };
+  const cleanup = await unsetUpstreamLinksForRemoteRef(cwd, remote, remoteBranch);
+  let message = `Deleted remote branch ${remote}/${remoteBranch}.`;
+  if (cleanup.unsetBranches.length > 0) {
+    message += ` Cleared upstream on ${cleanup.unsetBranches.join(", ")}.`;
+  }
+  if (!cleanup.complete) {
+    message += " Some local upstream links could not be cleared. Run Prune Stale.";
+  }
+  return { success: true, message };
 }
 
 async function runGuarded(cwd: string, confirmation: string, args: string[], successMessage: string): Promise<ActionResult> {

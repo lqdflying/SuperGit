@@ -10,7 +10,20 @@ vi.mock("../../git/api", () => ({
   getActiveRepository: vi.fn().mockResolvedValue({ root: "/repo", name: "repo", currentBranch: "main" })
 }));
 
-import { clearRemotesCache, getAheadBehind, getBranches, getCommitFileChanges, getCommits, getCurrentBranch, getFilesDiff, getRemoteBranches, getRemotes, getRepositoryState, unsetStaleUpstreamLinks } from "../../git/commands";
+import {
+  clearRemotesCache,
+  getAheadBehind,
+  getBranches,
+  getCommitFileChanges,
+  getCommits,
+  getCurrentBranch,
+  getFilesDiff,
+  getRemoteBranches,
+  getRemotes,
+  getRepositoryState,
+  unsetStaleUpstreamLinks,
+  unsetUpstreamLinksForRemoteRef
+} from "../../git/commands";
 import { getActiveRepository } from "../../git/api";
 import { runGit } from "../../git/runner";
 
@@ -417,6 +430,58 @@ describe("getBranches", () => {
     expect(unset).toEqual(["feature/remote-ahead-origin"]);
     expect(mockedRunGit).toHaveBeenCalledWith(["branch", "--unset-upstream", "feature/remote-ahead-origin"], "/repo", { timeout: 120_000 });
     expect(mockedRunGit).not.toHaveBeenCalledWith(["branch", "--unset-upstream", "main"], "/repo", { timeout: 120_000 });
+  });
+
+  it("clears every local upstream matching one exact remote branch", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {
+        return ok(
+          "work\tfoo/bar/feature/a\tfoo/bar\nwork-copy\tfoo/bar/feature/a\tfoo/bar\nother\tfoo/bar/feature/b\tfoo/bar\nsame\torigin/feature/a\torigin\n"
+        );
+      }
+      if (args[0] === "branch" && args.includes("--unset-upstream")) {
+        return ok("");
+      }
+      return ok("");
+    });
+
+    await expect(unsetUpstreamLinksForRemoteRef("/repo", "foo/bar", "feature/a")).resolves.toEqual({
+      unsetBranches: ["work", "work-copy"],
+      complete: true
+    });
+    expect(mockedRunGit).toHaveBeenCalledWith(["branch", "--unset-upstream", "work"], "/repo", { timeout: 120_000 });
+    expect(mockedRunGit).toHaveBeenCalledWith(["branch", "--unset-upstream", "work-copy"], "/repo", { timeout: 120_000 });
+    expect(mockedRunGit).not.toHaveBeenCalledWith(["branch", "--unset-upstream", "other"], "/repo", { timeout: 120_000 });
+    expect(mockedRunGit).not.toHaveBeenCalledWith(["branch", "--unset-upstream", "same"], "/repo", { timeout: 120_000 });
+  });
+
+  it("reports incomplete exact upstream cleanup without touching unmatched branches", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      if (args[0] === "for-each-ref" && args.includes("refs/heads/")) {
+        return ok("feature/a\torigin/feature/a\torigin\nfeature/b\torigin/feature/b\torigin\n");
+      }
+      if (args[0] === "branch" && args.includes("--unset-upstream")) {
+        return fail("failed");
+      }
+      return ok("");
+    });
+
+    await expect(unsetUpstreamLinksForRemoteRef("/repo", "origin", "feature/a")).resolves.toEqual({
+      unsetBranches: [],
+      complete: false
+    });
+    expect(mockedRunGit).not.toHaveBeenCalledWith(["branch", "--unset-upstream", "feature/b"], "/repo", { timeout: 120_000 });
+  });
+
+  it("reports incomplete exact upstream cleanup when branch discovery fails", async () => {
+    vi.clearAllMocks();
+    mockedRunGit.mockResolvedValue(fail("fatal"));
+
+    await expect(unsetUpstreamLinksForRemoteRef("/repo", "origin", "feature/a")).resolves.toEqual({
+      unsetBranches: [],
+      complete: false
+    });
+    expect(mockedRunGit).not.toHaveBeenCalledWith(["branch", "--unset-upstream", "feature/a"], "/repo", { timeout: 120_000 });
   });
 
   it("scopes stale upstream cleanup to one remote", async () => {

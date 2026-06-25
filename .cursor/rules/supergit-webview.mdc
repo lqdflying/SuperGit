@@ -146,6 +146,7 @@ Git has one default upstream; SuperGit shows multiple remote-tracking refs per b
 ### Stale upstream (`not on remote`)
 
 - `remoteRefExists: false` = configured upstream but no local `refs/remotes/<remote>/<branch>`
+- Successful **Delete Remote** immediately unsets local upstreams targeting that exact remote ref; the relationship row/arrow disappears after the normal post-action branch reload.
 - **Prune Stale** (confirmed): fetch/prune + `unsetStaleUpstreamLinks` — abort if `refs/remotes/` listing fails
 - Title-bar **Refresh**: fetch/prune/reload only — does **not** unset upstream
 
