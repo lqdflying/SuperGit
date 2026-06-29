@@ -3,6 +3,7 @@ import type { BranchInfo, FilesDiffFileChange, FilesDiffPayload, FilesDiffRef, R
 import { Icon } from "../../icons";
 import { buildFilesDiffRefs, branchColor, remoteColor, resolveFilesDiffDefaults } from "../../utils";
 import { useThemeColors } from "../../ThemeProvider";
+import { DefaultComparisonOverview, type DefaultComparisonRow } from "../DefaultComparison";
 
 interface FilesDiffTabProps {
   branches: BranchInfo[];
@@ -66,6 +67,11 @@ export function FilesDiffTab({
 
   const selectedLeft = refs.find((ref) => ref.ref === leftRef);
   const selectedRight = refs.find((ref) => ref.ref === rightRef);
+  const defaultComparisonRows = [toDefaultComparisonRow("left", selectedLeft), toDefaultComparisonRow("right", selectedRight)].filter(
+    (row): row is DefaultComparisonRow => Boolean(row)
+  );
+  const defaultComparisonRef =
+    defaultComparisonRows.find((row) => row.comparison)?.comparison?.defaultRef ?? defaultBranch;
   const summary = diff?.leftRef === leftRef && diff.rightRef === rightRef ? diff.summary : undefined;
   const files = diff?.leftRef === leftRef && diff.rightRef === rightRef ? diff.files : [];
   const sameRef = Boolean(leftRef && rightRef && leftRef === rightRef);
@@ -109,6 +115,13 @@ export function FilesDiffTab({
         <RefChip refInfo={selectedRight} fallback={rightRef} />
         {loading && <span className="files-diff-loading">Loading...</span>}
       </div>
+
+      <DefaultComparisonOverview
+        compact
+        rows={defaultComparisonRows}
+        subtitle={`Compared with ${defaultComparisonRef}`}
+        title="Default Comparison"
+      />
 
       {sameRef ? (
         <div className="files-diff-empty">Choose two different branches to compare.</div>
@@ -183,6 +196,26 @@ export function FilesDiffTab({
         {refInfo?.isDefault && <span className="tiny-pill">default</span>}
       </span>
     );
+  }
+
+  function toDefaultComparisonRow(slot: "left" | "right", refInfo?: FilesDiffRef): DefaultComparisonRow | undefined {
+    if (!refInfo) {
+      return undefined;
+    }
+
+    const color = refInfo.kind === "remote"
+      ? remoteColor(refInfo.colorIndex, theme)
+      : branchColor(refInfo.colorIndex, theme);
+    return {
+      key: slot,
+      label: refInfo.label,
+      detail: defaultBranch,
+      color,
+      comparison: refInfo.defaultComparison,
+      isCurrent: refInfo.isCurrent,
+      isDefault: refInfo.isDefault || refInfo.defaultComparison?.defaultRef === refInfo.ref,
+      extraBadge: <span className="tiny-pill">{slot}</span>
+    };
   }
 }
 

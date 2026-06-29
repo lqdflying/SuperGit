@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import type { BranchAction, BranchInfo, RemoteBranchInfo, RemoteConfig, RemoteTracking } from "../../../shared/types";
+import type { BranchAction, BranchInfo, DefaultBranchComparison, RemoteBranchInfo, RemoteConfig, RemoteTracking } from "../../../shared/types";
 import { Icon, type IconName } from "../../icons";
 import { useThemeColors } from "../../ThemeProvider";
 import { branchColor, blockHeight, buildTrackingRows, remoteBranchNameFromRef, remoteColor, resolveSelectedTracking, trackingRowHeight, type TrackingRow, hasMissingRemoteTrackingForTarget, addUpstreamRemoteBranchName } from "../../utils";
+import { DefaultComparisonCounts } from "../DefaultComparison";
 import { CurrentBadge } from "../badges";
 
 type TrackingStatus = "synced" | "ahead" | "behind" | "diverged" | "no-upstream" | "remote-only";
@@ -232,6 +233,9 @@ export function TrackingView({
         ? selectedTracking?.remoteRefExists && actionRemote && actionRemoteBranchName
         : actionBranchName
   );
+  const selectedDefaultComparison = selectedRemoteOnly
+    ? selectedRemoteBranch?.defaultComparison
+    : selectedTracking?.defaultComparison;
 
   function selectLocalBranch(branchName: string, trackingRef?: string) {
     setSelectedBranchName(branchName);
@@ -311,6 +315,12 @@ export function TrackingView({
             <Icon type="remote" size={12} />
             Remotes
           </div>
+          <div className="tracking-head-overview">
+            <span className="tracking-overview-subhead">
+              <span>Behind(Default)</span>
+              <span>Ahead(Default)</span>
+            </span>
+          </div>
         </div>
         <div className="tracking-table-body">
           {localRows.map((row) => {
@@ -379,6 +389,15 @@ export function TrackingView({
                     })
                   )}
                 </div>
+                <div className="tracking-cell-overview">
+                  {branch.remotes.length === 0 ? (
+                    <span className="untracked-mark">-</span>
+                  ) : (
+                    branch.remotes.map((tracking) => (
+                      <TrackingOverviewLine key={tracking.ref} comparison={tracking.defaultComparison} />
+                    ))
+                  )}
+                </div>
               </div>
             );
           })}
@@ -427,6 +446,9 @@ export function TrackingView({
                     </span>
                   </TrackingRemoteEntry>
                 </div>
+                <div className="tracking-cell-overview">
+                  <TrackingOverviewLine comparison={remoteBranch.defaultComparison} />
+                </div>
               </div>
             );
           })}
@@ -455,6 +477,7 @@ export function TrackingView({
             defaultUpstreamRef={defaultUpstreamRef}
             detached={detached}
             detachedLabel={currentBranchLabel}
+            defaultComparison={selectedDefaultComparison}
             status={trackingStatus}
             tracking={selectedTracking}
             trackingRef={trackingRef}
@@ -525,6 +548,14 @@ export function TrackingView({
   );
 }
 
+function TrackingOverviewLine({ comparison }: { comparison?: DefaultBranchComparison }) {
+  return (
+    <div className="tracking-overview-line" title={comparison ? `Compared with ${comparison.defaultRef}` : "Remote main comparison unavailable"}>
+      <DefaultComparisonCounts comparison={comparison} compact />
+    </div>
+  );
+}
+
 function TrackingTrackLine({ tracking, remoteColor: lineColor, syncedColor }: { tracking: RemoteTracking; remoteColor: string; syncedColor: string }) {
   return (
     <div className="tracking-track-line">
@@ -580,6 +611,7 @@ function SelectionStatus({
   branchName,
   checkoutBranch,
   defaultUpstreamRef,
+  defaultComparison,
   detached,
   detachedLabel,
   status,
@@ -590,6 +622,7 @@ function SelectionStatus({
   branchName: string;
   checkoutBranch?: string;
   defaultUpstreamRef?: string;
+  defaultComparison?: DefaultBranchComparison;
   detached: boolean;
   detachedLabel: string;
   status: TrackingStatus;
@@ -681,6 +714,13 @@ function SelectionStatus({
           <strong style={{ color: statusColor }}>{headline}</strong>
           <span>{detail}</span>
         </div>
+        {defaultComparison ? (
+          <div className="tracking-selection-status-default">
+            <span className="muted">Default</span>
+            <span className="mono">{defaultComparison.defaultRef}</span>
+            <DefaultComparisonCounts comparison={defaultComparison} />
+          </div>
+        ) : null}
         {detached ? (
           <div className="tracking-selection-status-note">
             Checked out at <strong className="mono">{detachedLabel}</strong> (detached HEAD).

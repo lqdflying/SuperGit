@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BranchInfo, RemoteBranchInfo, RemoteConfig } from "../../shared/types";
 import { FIELD_SEP, RECORD_SEP } from "../../git/parser";
 import type { GitResult } from "../../git/runner";
 
@@ -11,6 +12,7 @@ vi.mock("../../git/api", () => ({
 }));
 
 import {
+  addDefaultBranchComparisons,
   clearRemotesCache,
   getAheadBehind,
   getBranches,
@@ -18,6 +20,7 @@ import {
   getCommits,
   getCurrentBranch,
   getFilesDiff,
+  getDefaultBranchComparison,
   getRemoteBranches,
   getRemotes,
   getRepositoryState,
@@ -305,6 +308,114 @@ describe("getAheadBehind", () => {
   it("returns zero counts on git errors", async () => {
     mockedRunGit.mockResolvedValue(fail("bad ref"));
     await expect(getAheadBehind("/repo", "main", "origin/main")).resolves.toEqual({ ahead: 0, behind: 0 });
+  });
+});
+
+describe("default branch comparisons", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("parses GitHub-style counts against the default ref", async () => {
+    mockedRunGit.mockResolvedValue(ok("8\t3\n"));
+    await expect(getDefaultBranchComparison("/repo", "feature/x", "main")).resolves.toEqual({
+      defaultRef: "main",
+      behind: 8,
+      ahead: 3
+    });
+    expect(mockedRunGit).toHaveBeenCalledWith(["rev-list", "--left-right", "--count", "main...feature/x"], "/repo");
+  });
+
+  it("uses zero counts for the default ref without running git", async () => {
+    await expect(getDefaultBranchComparison("/repo", "main", "main")).resolves.toEqual({
+      defaultRef: "main",
+      behind: 0,
+      ahead: 0
+    });
+    expect(mockedRunGit).not.toHaveBeenCalled();
+  });
+
+  it("adds comparisons to remote rows against each remote default ref", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      const range = args[3];
+      if (range === "origin/main...origin/feature/x") {
+        return ok("2\t5\n");
+      }
+      if (range === "upstream/main...upstream/feature/x") {
+        return ok("7\t1\n");
+      }
+      return ok("0\t0\n");
+    });
+    const branches: BranchInfo[] = [
+      {
+        name: "feature/x",
+        colorIndex: 1,
+        isCurrent: false,
+        remotes: [
+          {
+            remote: "origin",
+            ref: "origin/feature/x",
+            ahead: 0,
+            behind: 0,
+            isConfiguredUpstream: true,
+            remoteRefExists: true
+          }
+        ]
+      }
+    ];
+    const remoteBranches: RemoteBranchInfo[] = [
+      { remote: "origin", branchName: "main", ref: "origin/main", colorIndex: 0 },
+      { remote: "origin", branchName: "feature/x", ref: "origin/feature/x", colorIndex: 0, localBranchName: "feature/x" },
+      { remote: "upstream", branchName: "main", ref: "upstream/main", colorIndex: 1 },
+      { remote: "upstream", branchName: "feature/x", ref: "upstream/feature/x", colorIndex: 1 }
+    ];
+
+    const result = await addDefaultBranchComparisons("/repo", branches, remoteBranches, "main");
+    expect(result.defaultRef).toBe("origin/main");
+    expect(result.branches[0].remotes[0].defaultComparison).toMatchObject({
+      defaultRef: "origin/main",
+      behind: 2,
+      ahead: 5
+    });
+    expect(result.remoteBranches.find((branch) => branch.ref === "upstream/feature/x")?.defaultComparison).toMatchObject({
+      defaultRef: "upstream/main",
+      behind: 7,
+      ahead: 1
+    });
+  });
+
+  it("uses each remote's own default branch when it differs from origin", async () => {
+    mockedRunGit.mockImplementation(async (args) => {
+      const range = args[3];
+      if (range === "origin/main...origin/feature/x") {
+        return ok("1\t2\n");
+      }
+      if (range === "upstream/master...upstream/feature/x") {
+        return ok("3\t4\n");
+      }
+      return ok("0\t0\n");
+    });
+    const remotes: RemoteConfig[] = [
+      { name: "origin", url: "origin-url", colorIndex: 0, defaultBranch: "main" },
+      { name: "upstream", url: "upstream-url", colorIndex: 1, defaultBranch: "master" }
+    ];
+    const remoteBranches: RemoteBranchInfo[] = [
+      { remote: "origin", branchName: "main", ref: "origin/main", colorIndex: 0 },
+      { remote: "origin", branchName: "feature/x", ref: "origin/feature/x", colorIndex: 0 },
+      { remote: "upstream", branchName: "master", ref: "upstream/master", colorIndex: 1 },
+      { remote: "upstream", branchName: "feature/x", ref: "upstream/feature/x", colorIndex: 1 }
+    ];
+
+    const result = await addDefaultBranchComparisons("/repo", [], remoteBranches, "main", remotes);
+    expect(result.remoteBranches.find((branch) => branch.ref === "origin/feature/x")?.defaultComparison).toMatchObject({
+      defaultRef: "origin/main",
+      behind: 1,
+      ahead: 2
+    });
+    expect(result.remoteBranches.find((branch) => branch.ref === "upstream/feature/x")?.defaultComparison).toMatchObject({
+      defaultRef: "upstream/master",
+      behind: 3,
+      ahead: 4
+    });
+    expect(mockedRunGit).not.toHaveBeenCalledWith(["rev-list", "--left-right", "--count", "upstream/main...upstream/feature/x"], "/repo");
   });
 });
 

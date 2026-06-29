@@ -22,6 +22,15 @@ export interface CommitNode {
   isMerge: boolean;
 }
 
+export interface DefaultBranchComparison {
+  /** Ref used as the default branch comparison baseline. */
+  defaultRef: string;
+  /** Commits present on this ref and not on the default ref. */
+  ahead: number;
+  /** Commits present on the default ref and not on this ref. */
+  behind: number;
+}
+
 export type HistoryScope =
   | { type: "all" }
   | { type: "local"; ref: string; branchName: string }
@@ -42,6 +51,7 @@ export interface RemoteTracking {
   isConfiguredUpstream: boolean;
   /** False when upstream is configured but no matching refs/remotes/* ref exists locally (often not on remote). */
   remoteRefExists: boolean;
+  defaultComparison?: DefaultBranchComparison;
 }
 
 export interface RemoteBranchInfo {
@@ -50,6 +60,7 @@ export interface RemoteBranchInfo {
   ref: string;
   colorIndex: number;
   localBranchName?: string;
+  defaultComparison?: DefaultBranchComparison;
 }
 
 export interface RemoteConfig {
@@ -113,6 +124,7 @@ export interface FilesDiffRef {
   colorIndex: number;
   isCurrent?: boolean;
   isDefault?: boolean;
+  defaultComparison?: DefaultBranchComparison;
 }
 
 export interface FilesDiffFileChange extends CommitFileChange {

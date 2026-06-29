@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.1.0 - 2026-06-29
+
+### Added
+
+- Branch Tracking now shows fixed **Behind(Default)** and **Ahead(Default)** columns after **Remotes**.
+- Default comparison counts are computed per remote row against that remote's own default branch, including multi-remote cases where defaults differ (for example `origin/main` and `upstream/master`).
+- Files Diff shows compact default comparison counts for the selected refs using the same remote-default comparison data.
+
+### Changed
+
+- Remote-default comparison prefers enriched `remote.defaultBranch`, then local `refs/remotes/<remote>/HEAD`, then the repository default branch name as fallback.
+- Branch data reloads after background remote-default enrichment so comparison counts can update when remote defaults are discovered.
+
+### Verified
+
+- `npm run typecheck`
+- `npm run test:coverage` (179 tests)
+- `npm run build`
+- `npm run package`
+
 ## 2.0.1 - 2026-06-25
 
 ### Fixed

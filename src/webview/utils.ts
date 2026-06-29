@@ -213,13 +213,17 @@ export function buildFilesDiffRefs(
       continue;
     }
     seen.add(branch.name);
+    const configuredComparison =
+      branch.remotes.find((tracking) => tracking.isConfiguredUpstream && tracking.remoteRefExists)?.defaultComparison ??
+      branch.remotes.find((tracking) => tracking.remoteRefExists)?.defaultComparison;
     refs.push({
       kind: "local",
       ref: branch.name,
       label: branch.name,
       branchName: branch.name,
       colorIndex: branch.colorIndex,
-      isCurrent: branch.isCurrent
+      isCurrent: branch.isCurrent,
+      defaultComparison: configuredComparison
     });
   }
 
@@ -237,7 +241,8 @@ export function buildFilesDiffRefs(
       branchName: remoteBranch.branchName,
       remote: remoteBranch.remote,
       colorIndex: remoteBranch.colorIndex,
-      isDefault: remote?.defaultBranch === remoteBranch.branchName
+      isDefault: remote?.defaultBranch === remoteBranch.branchName,
+      defaultComparison: remoteBranch.defaultComparison
     });
   }
 

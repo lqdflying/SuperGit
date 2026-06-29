@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { executeBranchAction, executeCommitAction } from "./git/actions";
 import { getActiveRepository, onRepositoryChange } from "./git/api";
 import {
+  addDefaultBranchComparisons,
   getBranches,
   getCommitBaseHash,
   getCommitFileChanges,
@@ -51,6 +52,7 @@ let managedRefreshClearTimer: NodeJS.Timeout | undefined;
 let loadInitialDataPromise: Promise<void> | undefined;
 let enrichRemoteDefaultsGeneration = 0;
 let latestEnrichRemoteDefaultsKey: string | undefined;
+let lastRemotesRoot: string | undefined;
 const enrichRemoteDefaultsInflight = new Map<string, Promise<void>>();
 
 const lastCommitRequest: { dateRange: DateRange; page: number; searchText: string; scope: HistoryScope } = {
@@ -431,12 +433,20 @@ async function loadBranches(knownRoot?: string): Promise<void> {
   post({ type: "loading", loading: true, scope: "branches" });
   try {
     const root = knownRoot ?? (await resolveRepositoryRoot());
-    const [branches, remoteBranches, defaultBranch] = root
+    let [branches, remoteBranches, defaultBranch] = root
       ? await Promise.all([getBranches(root), getRemoteBranches(root), resolveDefaultBranch(root)])
       : [[], [], "main"];
+    let defaultRef: string | undefined;
+    if (root) {
+      const comparisonRemotes = lastRemotesRoot === root ? lastRemotes : [];
+      const enriched = await addDefaultBranchComparisons(root, branches, remoteBranches, defaultBranch, comparisonRemotes);
+      branches = enriched.branches;
+      remoteBranches = enriched.remoteBranches;
+      defaultRef = enriched.defaultRef;
+    }
     lastDefaultBranch = defaultBranch;
     post({ type: "branches-data", branches, remoteBranches, defaultBranch });
-    info("branches loaded", { count: branches.length, remoteBranchCount: remoteBranches.length });
+    info("branches loaded", { count: branches.length, remoteBranchCount: remoteBranches.length, defaultRef });
   } catch (error) {
     postError(error);
   } finally {
@@ -503,6 +513,7 @@ async function loadRemotes(knownRoot?: string, options?: LoadRemotesOptions): Pr
           const previous = lastRemotes.find((candidate) => candidate.name === remote.name);
           return previous?.defaultBranch ? { ...remote, defaultBranch: previous.defaultBranch } : remote;
         });
+    lastRemotesRoot = root;
     lastRemotes = remotesWithDefaults;
     post({ type: "remotes-data", remotes: remotesWithDefaults });
     info("remotes loaded", { count: remotesWithDefaults.length, enrichDefaults });
@@ -544,9 +555,11 @@ async function enrichRemoteDefaultsInner(root: string, remotes: RemoteConfig[], 
       debug("enrichRemoteDefaults result skipped; stale key", { key, latest: latestEnrichRemoteDefaultsKey });
       return;
     }
+    lastRemotesRoot = root;
     lastRemotes = enriched;
     post({ type: "remotes-data", remotes: enriched });
     info("remote default branches enriched", { count: enriched.length });
+    await loadBranches(root);
   } catch (error) {
     warn("remote default branch enrichment failed", error);
   }

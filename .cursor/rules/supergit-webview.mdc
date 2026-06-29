@@ -143,6 +143,14 @@ Git has one default upstream; SuperGit shows multiple remote-tracking refs per b
 - Footer legend: `★ default branch` using same token
 - Enrichment: `enrichRemotesWithDefaultBranches`; invalidate via `invalidateRemoteDataCaches(root)`
 
+### Default comparison overview
+
+- Branch Tracking shows fixed comparison columns after **Remotes** labeled **Behind(Default)** and **Ahead(Default)**, not a separate block above the diagram.
+- Default comparison counts are per remote row and use cached refs only: `behind` = commits on `<remote>/<remote.defaultBranch>` not on the remote row ref; `ahead` = commits on the remote row ref not on `<remote>/<remote.defaultBranch>`.
+- For multi-remote repos, prefer each remote's own enriched `defaultBranch`; fall back to local `refs/remotes/<remote>/HEAD`, then the repo default branch name when that remote default is unavailable.
+- Local-only rows do not get overview counts unless a remote-tracking row exists; keep upstream `ahead`/`behind` separate because Quick Actions continue to use upstream counts only.
+- Files Diff shows the same remote-default comparison counts for the selected left/right refs above the file summary.
+
 ### Stale upstream (`not on remote`)
 
 - `remoteRefExists: false` = configured upstream but no local `refs/remotes/<remote>/<branch>`

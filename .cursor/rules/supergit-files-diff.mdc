@@ -14,6 +14,7 @@ Files Diff is the third SuperGit tab after Commit Graph and Branch Tracking.
 - Use cached refs only. Do **not** fetch automatically before comparing; the existing title-bar Refresh fetches/prunes and then reloads active data.
 - Default left ref: checked-out local branch.
 - Default right ref: configured upstream for the left branch when present and locally available; otherwise a remote default branch; otherwise first different ref.
+- Show a compact Default Comparison overview for the selected refs using cached remote branch data: `behind` = commits on `<remote>/<remote.defaultBranch>` not on the selected remote ref; `ahead` = commits on the selected remote ref not on `<remote>/<remote.defaultBranch>`.
 - Direct tip comparison only: `git diff <leftRef> <rightRef>`, not merge-base `A...B`.
 - File list data comes from paired `git diff --name-status -M` and `git diff --numstat -M`.
 - Per-file opening uses `vscode.diff` through the `supergit:` content provider. Added/deleted sides use empty virtual documents.

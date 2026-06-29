@@ -1,5 +1,15 @@
 import * as path from "node:path";
-import type { BranchInfo, CommitFileChange, DateRange, FilesDiffPayload, HistoryScope, RemoteBranchInfo, RemoteConfig, RepositoryState } from "../shared/types";
+import type {
+  BranchInfo,
+  CommitFileChange,
+  DateRange,
+  DefaultBranchComparison,
+  FilesDiffPayload,
+  HistoryScope,
+  RemoteBranchInfo,
+  RemoteConfig,
+  RepositoryState
+} from "../shared/types";
 import { DEFAULT_HISTORY_SCOPE, PAGE_SIZE } from "../shared/types";
 import { colors } from "../shared/tokens";
 import { getActiveRepository } from "./api";
@@ -321,6 +331,93 @@ export async function getAheadBehind(cwd: string, localBranch: string, remoteBra
   };
 }
 
+export async function addDefaultBranchComparisons(
+  cwd: string,
+  branches: BranchInfo[],
+  remoteBranches: RemoteBranchInfo[],
+  defaultBranch: string,
+  remotes: RemoteConfig[] = []
+): Promise<{ branches: BranchInfo[]; remoteBranches: RemoteBranchInfo[]; defaultRef?: string }> {
+  const remoteRefs = new Set(remoteBranches.map((remoteBranch) => remoteBranch.ref));
+  const remoteDefaultRefs = await resolveRemoteDefaultComparisonRefs(cwd, branches, remoteBranches, remoteRefs, defaultBranch, remotes);
+
+  if (remoteDefaultRefs.size === 0) {
+    return { branches, remoteBranches };
+  }
+
+  const comparisonRequests = new Map<string, { ref: string; defaultRef: string }>();
+  function addComparisonRequest(remote: string, ref: string): void {
+    const defaultRef = remoteDefaultRefs.get(remote);
+    if (!defaultRef) {
+      return;
+    }
+    comparisonRequests.set(`${defaultRef}\0${ref}`, { ref, defaultRef });
+  }
+
+  for (const branch of branches) {
+    for (const tracking of branch.remotes) {
+      if (tracking.remoteRefExists) {
+        addComparisonRequest(tracking.remote, tracking.ref);
+      }
+    }
+  }
+  for (const remoteBranch of remoteBranches) {
+    addComparisonRequest(remoteBranch.remote, remoteBranch.ref);
+  }
+
+  const comparisons = new Map<string, DefaultBranchComparison>();
+  await Promise.all(
+    [...comparisonRequests.values()].map(async ({ ref, defaultRef }) => {
+      const comparison = await getDefaultBranchComparison(cwd, ref, defaultRef);
+      if (comparison) {
+        comparisons.set(`${defaultRef}\0${ref}`, comparison);
+      }
+    })
+  );
+
+  function comparisonFor(remote: string, ref: string): DefaultBranchComparison | undefined {
+    const defaultRef = remoteDefaultRefs.get(remote);
+    return defaultRef ? comparisons.get(`${defaultRef}\0${ref}`) : undefined;
+  }
+
+  return {
+    defaultRef: remoteDefaultRefs.values().next().value,
+    branches: branches.map((branch) => ({
+      ...branch,
+      remotes: branch.remotes.map((tracking) => ({
+        ...tracking,
+        defaultComparison: tracking.remoteRefExists ? comparisonFor(tracking.remote, tracking.ref) : undefined
+      }))
+    })),
+    remoteBranches: remoteBranches.map((remoteBranch) => ({
+      ...remoteBranch,
+      defaultComparison: comparisonFor(remoteBranch.remote, remoteBranch.ref)
+    }))
+  };
+}
+
+export async function getDefaultBranchComparison(
+  cwd: string,
+  ref: string,
+  defaultRef: string
+): Promise<DefaultBranchComparison | undefined> {
+  if (ref === defaultRef) {
+    return { defaultRef, ahead: 0, behind: 0 };
+  }
+
+  const result = await runGit(["rev-list", "--left-right", "--count", `${defaultRef}...${ref}`], cwd);
+  if (result.exitCode !== 0) {
+    return undefined;
+  }
+
+  const [behind, ahead] = result.stdout.trim().split(/\s+/).map((value) => Number.parseInt(value, 10));
+  if (!Number.isFinite(ahead) || !Number.isFinite(behind)) {
+    return undefined;
+  }
+
+  return { defaultRef, ahead, behind };
+}
+
 export async function getCurrentBranch(cwd: string): Promise<string> {
   const result = await runGit(["branch", "--show-current"], cwd);
   if (result.exitCode === 0 && result.stdout.trim()) {
@@ -513,6 +610,43 @@ function remoteBranchNameCandidates(localBranchName: string, upstreamRef: string
     }
   }
   return [...candidates];
+}
+
+async function resolveRemoteDefaultComparisonRefs(
+  cwd: string,
+  branches: BranchInfo[],
+  remoteBranches: RemoteBranchInfo[],
+  remoteRefs: Set<string>,
+  defaultBranch: string,
+  remotes: RemoteConfig[]
+): Promise<Map<string, string>> {
+  const remoteDefaults = new Map(remotes.filter((remote) => remote.defaultBranch).map((remote) => [remote.name, remote.defaultBranch as string]));
+  const remoteNames = new Set<string>();
+  for (const remoteBranch of remoteBranches) {
+    remoteNames.add(remoteBranch.remote);
+  }
+  for (const branch of branches) {
+    for (const tracking of branch.remotes) {
+      remoteNames.add(tracking.remote);
+    }
+  }
+
+  const entries = await Promise.all(
+    [...remoteNames].map(async (remoteName): Promise<[string, string] | undefined> => {
+      const knownDefault = remoteDefaults.get(remoteName);
+      const localDefault = knownDefault ? undefined : await resolveRemoteDefaultBranch(cwd, remoteName, { network: false });
+      const candidates = [knownDefault, localDefault, defaultBranch].filter((value): value is string => Boolean(value));
+      for (const branchName of candidates) {
+        const ref = `${remoteName}/${branchName}`;
+        if (remoteRefs.has(ref)) {
+          return [remoteName, ref];
+        }
+      }
+      return undefined;
+    })
+  );
+
+  return new Map(entries.filter((entry): entry is [string, string] => Boolean(entry)));
 }
 
 function formatGitError(prefix: string, stderr: string, timedOut: boolean): string {
